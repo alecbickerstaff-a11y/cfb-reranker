@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Résumé Re-ranker</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--ink:#1b1b19;--mute:#6b6a64;--faint:#9b9a93;--line:#e4e2da;--acc:#185fa5;--acc-bg:#e6f1fb;--up:#3b6d11;--dn:#a32d2d;--h:#534ab7;--o:#0f6e56;--d:#993c1d;--h-bg:#eeedfe;--o-bg:#e1f5ee;--d-bg:#faece7;--p:#854f0b;--p-bg:#faeeda}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--card:#1f1f1d;--ink:#ecebe6;--mute:#a3a29b;--faint:#77766f;--line:#33332f;--acc:#85b7eb;--acc-bg:#0c2a48;--up:#97c459;--dn:#f09595;--h:#afa9ec;--o:#5dcaa5;--d:#f0997b;--h-bg:#26215c;--o-bg:#04342c;--d-bg:#4a1b0c;--p:#ef9f27;--p-bg:#412402}}
+:root[data-theme="dark"]{--bg:#161615;--card:#1f1f1d;--ink:#ecebe6;--mute:#a3a29b;--faint:#77766f;--line:#33332f;--acc:#85b7eb;--acc-bg:#0c2a48;--up:#97c459;--dn:#f09595;--h:#afa9ec;--o:#5dcaa5;--d:#f0997b;--h-bg:#26215c;--o-bg:#04342c;--d-bg:#4a1b0c;--p:#ef9f27;--p-bg:#412402}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;font-weight:600;margin:0 0 2px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 18px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font:inherit;font-size:14px;color:var(--mute);cursor:pointer}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--acc);font-weight:600}
+.panel[hidden]{display:none}
+.grid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{font-size:14px;font-weight:600;margin:0 0 10px}
+.ctl{margin:0 0 14px}
+.ctl-top{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.ctl-top b{font-weight:600}
+.ctl-def{font-size:12px;color:var(--mute);margin:2px 0 6px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px}
+.ph{background:var(--h-bg);color:var(--h)}.po{background:var(--o-bg);color:var(--o)}.pd{background:var(--d-bg);color:var(--d)}.pp{background:var(--p-bg);color:var(--p)}
+.mix{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:6px 0 4px;background:var(--line)}
+.mix span{display:block;height:100%}
+.formula{font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:10px 0 0;white-space:normal;word-break:break-word}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:12px 0 0}
+.chk small{display:block;color:var(--mute);font-size:12px}
+.log{font-size:13px}
+.log .empty{color:var(--faint)}
+.mv-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+.mv-row:first-child{border-top:0}
+.why{font-size:12px;color:var(--mute)}
+.up{color:var(--up)}.dn{color:var(--dn)}.flat{color:var(--faint)}
+.rk{display:grid;grid-template-columns:28px minmax(0,1fr) 64px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.rk:last-child{border-bottom:0}
+.rk .n{color:var(--mute);font-size:13px;text-align:right}
+.rk .t{display:flex;justify-content:space-between;gap:8px}
+.rk .t span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec{color:var(--faint);font-size:12px;margin-left:4px}
+.parts{font-size:11px;color:var(--mute);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap}
+.parts b{font-weight:600}
+.dv{position:relative;height:6px;background:var(--bg);border-radius:3px;margin-top:5px}
+.dv .mid{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--faint)}
+.dv span{position:absolute;top:0;height:6px}
+.ap{font-size:12px;text-align:right}
+.legend{font-size:12px;color:var(--mute);display:flex;gap:12px;flex-wrap:wrap;margin:0 0 8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--mute);font-size:12px;cursor:pointer;user-select:none}
+th:first-child,td:first-child{text-align:left}
+tbody tr.team{cursor:pointer}
+tbody tr.team:hover{background:var(--bg)}
+tr.games td{background:var(--bg);padding:0 8px 10px}
+.gl{width:100%;font-size:12px}
+.gl td:last-child,.gl th:last-child{text-align:right}#ex-body .gl td:last-child,#ex-body .gl th:last-child{text-align:left;white-space:normal}.gl td,.gl th{border-bottom:1px solid var(--line);padding:5px 6px}
+.scroll{overflow-x:auto}
+.defs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:20px}
+.defs .card p{margin:0 0 6px;font-size:13px;color:var(--mute)}
+.defs code{font:12px ui-monospace,Menlo,monospace;color:var(--ink)}
+.note{font-size:12px;color:var(--mute);margin-top:14px}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.metric{background:var(--bg);border-radius:10px;padding:12px 14px}
+.metric .ml{font-size:12px;color:var(--mute)}.metric .mv{font-size:26px;font-weight:600;line-height:1.3}.metric .ms{font-size:12px;color:var(--mute)}
+.gridl{stroke:var(--line);stroke-width:1}.axl{fill:var(--mute);font-size:11px}
+svg{width:100%;height:auto;display:block}
+.mat{border-collapse:separate;border-spacing:2px;font-size:12px}.mat td{text-align:center;border:0;border-radius:4px;padding:8px 4px;min-width:52px}.mat th{border:0;font-size:11px;padding:4px;cursor:default}
+.sec{margin-top:20px}.sec h2{font-size:15px;font-weight:600;margin:0 0 4px}.sec .lede{font-size:13px;color:var(--mute);margin:0 0 12px;max-width:720px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px}.seg button{font:inherit;font-size:12px;padding:5px 12px;border:0;background:var(--card);color:var(--mute);cursor:pointer}.seg button.on{background:var(--acc-bg);color:var(--acc);font-weight:600}
+select{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.tl{padding:10px 0;border-top:1px solid var(--line)}.tl:first-child{border-top:0;padding-top:0}.tlh{font-size:13px;font-weight:600;margin-bottom:2px}.tl p{margin:0;font-size:14px;max-width:760px}
+.exh{font-size:14px;font-weight:600;margin:18px 0 4px}.exp{font-size:13px;color:var(--mute);margin:6px 0 10px;max-width:780px}
+.subnav{position:sticky;top:0;z-index:5;display:flex;gap:6px;overflow-x:auto;padding:8px 0 12px;margin-bottom:8px;background:var(--bg);border-bottom:1px solid var(--line)}
+.sbtn{flex:none;font:inherit;font-size:13px;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--mute);cursor:pointer;white-space:nowrap}
+.sbtn.on{background:var(--acc-bg);color:var(--acc);border-color:var(--acc);font-weight:600}
+.subp[hidden]{display:none}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.fcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.fcard .ftag{align-self:flex-start;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px}
+.fcard h3{margin:0;font-size:15px;font-weight:600;line-height:1.35}
+.fcard .fnum{font-size:28px;font-weight:600;line-height:1.1}.fcard .fnum small{font-size:12px;font-weight:400;color:var(--mute);margin-left:6px}
+.fcard p{margin:0;font-size:13.5px;color:var(--mute);line-height:1.55}
+.kpi .mv{font-size:24px}
+#imp-read p{margin:0 0 10px}
+#p-ana .gl td,#p-ana .gl th,#p-conf .gl td:first-child,#p-conf .gl th:first-child{text-align:left}
+.lede{font-size:13px;color:var(--mute);margin:0 0 12px;max-width:720px}
+.whead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.wtog{display:none;font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);cursor:pointer}
+.wsum{display:none;font-size:13px;color:var(--mute)}
+@media (max-width:760px){
+.wrap{padding:16px 12px 40px}
+h1{font-size:20px}
+.tabs{overflow-x:auto;gap:0}.tab{padding:10px 10px;font-size:13.5px;white-space:nowrap}
+#p-rank .grid>div:first-child{display:contents}
+.wcard{order:1}.o2{order:2}.o3{order:3;margin-top:0!important}.o4{order:4;margin-top:0!important}
+.wtog{display:inline-block}
+.wcard.collapsed #wbody{display:none}.wcard.collapsed .wsum{display:block}
+.card{padding:14px}
+.rk{grid-template-columns:22px minmax(0,1fr) 50px;gap:8px}
+.parts{gap:8px;font-size:11px}
+.legend{gap:8px;font-size:11px}
+.axl{font-size:17px}
+#bump{overflow-x:auto;-webkit-overflow-scrolling:touch}#bump svg{min-width:640px}#bump .axl{font-size:12px}#imp-chart svg,#sens svg{min-width:520px}#imp-chart,#sens{overflow-x:auto}
+.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.metric{padding:10px}.metric .mv{font-size:20px}.metric .ms{font-size:11.5px}
+.fgrid{grid-template-columns:minmax(0,1fr)}
+.fcard .fnum{font-size:24px}
+#swaps .mv-row{grid-template-columns:minmax(0,1fr)}
+#swaps .mv-row .why{margin-top:2px}
+.defs{grid-template-columns:minmax(0,1fr)}
+.subnav{padding:6px 0 10px}
+.formula{font-size:11px}
+table{font-size:12px}th,td{padding:6px 5px}
+}
+.live{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px}.live div{background:var(--bg);border-radius:8px;padding:6px 8px;text-align:center}.live b{display:block;font-size:16px}.live span{font-size:11px;color:var(--mute)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Résumé re-ranker</h1>
+<p class="sub">Every team ranked in the AP poll at any point in 2026, rebuilt from game results through Oct 24.</p>
+<div class="tabs" role="tablist">
+<button class="tab" role="tab" aria-selected="true" data-tab="rank">Rankings</button>
+<button class="tab" role="tab" aria-selected="false" data-tab="stats">Stats</button>
+<button class="tab" role="tab" aria-selected="false" data-tab="conf">Conferences</button>
+<button class="tab" role="tab" aria-selected="false" data-tab="ana">Analysis</button>
+</div>
+
+<section class="panel" id="p-rank">
+<div class="grid">
+<div>
+<div class="card wcard">
+<div class="whead"><h2 style="margin:0">Weights</h2><button id="wtoggle" class="wtog" aria-expanded="true">Hide</button></div>
+<div class="wsum" id="wsum"></div>
+<div id="wbody">
+<div class="ctl">
+<div class="ctl-top"><span><span class="pill ph">H2H</span> Head-to-head résumé</span><b id="whv"></b></div>
+<div class="ctl-def">Who you beat and lost to, by opponent strength and site.</div>
+<input type="range" id="wh" min="0" max="100" step="1" value="60">
+</div>
+<div class="ctl">
+<div class="ctl-top"><span><span class="pill po">OFF</span> Offense</span><b id="wov"></b></div>
+<div class="ctl-def">Points scored, weighted up against good opponents.</div>
+<input type="range" id="wo" min="0" max="100" step="1" value="20">
+</div>
+<div class="ctl">
+<div class="ctl-top"><span><span class="pill pd">DEF</span> Defense</span><b id="wdv"></b></div>
+<div class="ctl-def">Points allowed, weighted up against weak opponents.</div>
+<input type="range" id="wd" min="0" max="100" step="1" value="20">
+</div>
+<div class="ctl">
+<div class="ctl-top"><span><span class="pill pp">PRE</span> Preseason reputation</span><b id="wpv"></b></div>
+<div class="ctl-def">Preseason AP points. Not a result. Set it above 0 to see how much reputation it takes to reproduce the AP.</div>
+<input type="range" id="wp" min="0" max="100" step="1" value="0">
+</div>
+<div class="ctl" style="padding-top:12px;border-top:1px solid var(--line)">
+<div class="ctl-top"><span><span class="pill" style="background:var(--bg);color:var(--ink);border:1px solid var(--line)">REC</span> Recency</span><b id="recv"></b></div>
+<div class="ctl-def" id="recd"></div>
+<input type="range" id="rec" min="0" max="100" step="5" value="0">
+</div>
+<div style="font-size:12px;color:var(--mute)">Effective share of the score</div>
+<div class="mix"><span id="mh" style="background:var(--h)"></span><span id="mo" style="background:var(--o)"></span><span id="md" style="background:var(--d)"></span><span id="mp" style="background:var(--p)"></span></div>
+<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--h)" id="sh"></span><span style="color:var(--o)" id="so"></span><span style="color:var(--d)" id="sd"></span><span style="color:var(--p)" id="sp"></span></div>
+<div class="formula" id="formula"></div>
+<label class="chk"><input type="checkbox" id="h2h" checked><span>Head-to-head tiebreak<small>A team that beat another ranked team is placed above it when the loser's score is less than 6 points higher.</small></span></label>
+<div style="font-size:12px;color:var(--mute);margin-top:14px">Agreement with the AP poll at these weights</div>
+<div class="live" id="live"></div>
+<div style="margin-top:12px;display:flex;gap:8px"><button id="reset" style="font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;cursor:pointer">Reset</button><button id="matchap" style="font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--acc);background:var(--acc-bg);color:var(--acc);border-radius:8px;cursor:pointer">Match the AP</button></div>
+<div class="note" id="matchnote" style="margin-top:8px"></div>
+<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><button id="share" style="font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;cursor:pointer;width:100%">Copy link to these settings</button>
+<input id="sharebox" readonly style="display:none;width:100%;margin-top:8px;font:12px ui-monospace,Menlo,monospace;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)"><div class="note" id="sharenote" style="margin-top:6px">Includes sliders, recency, tiebreak and conference values.</div></div>
+</div>
+</div>
+
+<div class="card o3" style="margin-top:16px">
+<h2 id="chg-title">What the last move did</h2>
+<div class="log" id="chg"><div class="empty">Move a slider to see who rises, who falls, and which stat drove it.</div></div>
+</div>
+
+<div class="card o4" style="margin-top:16px">
+<h2>Tiebreaks applied</h2>
+<div class="log" id="swaps"></div>
+</div>
+</div>
+
+<div class="card o2">
+<div class="legend"><span><i style="background:var(--h)"></i>H2H points</span><span><i style="background:var(--o)"></i>Offense points</span><span><i style="background:var(--d)"></i>Defense points</span><span><i style="background:var(--p)"></i>Preseason points</span><span>Center line is an average team (50)</span></div>
+<div id="list"></div>
+</div>
+</div>
+</section>
+
+<section class="panel" id="p-stats" hidden>
+<div class="card" style="margin-bottom:16px"><h2 style="font-size:16px">How q and z work</h2>
+<p class="exp" style="margin-top:0">Pick a team to walk through its numbers from raw game results to final score.</p>
+<select id="ex-team"></select><div id="ex-body"></div></div>
+<div class="card scroll">
+<table id="st">
+<thead><tr>
+<th data-k="t">Team</th><th data-k="rec">Rec</th><th data-k="ap">AP</th><th data-k="sos">Opp str</th>
+<th data-k="h">H2H raw</th><th data-k="zh">H2H z</th>
+<th data-k="o">Off adj</th><th data-k="zo">Off z</th>
+<th data-k="d">Def adj</th><th data-k="zd">Def z</th>
+<th data-k="ppg">PPG</th><th data-k="papg">PA/G</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+<div class="note">Tap a team to open its game log. Tap a column header to sort. Opp str is the average adjusted strength of every opponent played.</div>
+</div>
+
+<div class="defs">
+<div class="card"><h2>Opponent strength (q)</h2>
+<p>The opponent's win percentage with the game against this team removed.</p>
+<p>Then multiplied by the opponent's conference value from the Conferences tab. Defaults: SEC, Big Ten, Big 12, ACC and Notre Dame 1.00, every other FBS conference 0.70, FCS opponents fixed at 0.10.</p></div>
+<div class="card"><h2>H2H game value</h2>
+<p>Win: <code>1 + q</code>, plus 0.10 on the road or 0.05 at a neutral site.</p>
+<p>Loss: <code>q − 0.5</code>, minus 0.10 at home, plus 0.10 if it was within 7 points.</p>
+<p>H2H raw is the average across all games, so 7 and 8 game teams compare evenly. With recency above 0, it's a weighted average: last week's game counts 100% and a week 1 game counts 100 − 0.8 × recency percent.</p></div>
+<div class="card"><h2>Offense adj</h2>
+<p>Per game: <code>min(points, 56) × (0.6 + 0.8q)</code>, then averaged.</p>
+<p>Scoring 30 on a q of 0.9 counts as 40. Scoring 30 on a q of 0.1 counts as 20.</p></div>
+<div class="card"><h2>Defense adj</h2>
+<p>Per game: <code>points allowed × (1.4 − 0.8q)</code>, then averaged. Lower is better.</p>
+<p>Allowing 20 to a q of 0.1 counts as 26. Allowing 20 to a q of 0.9 counts as 14.</p></div>
+<div class="card"><h2>z-scores and the final score</h2>
+<p>Each stat is converted to a z-score across every tracked team, so 0 is the group average and ±1 is one standard deviation.</p>
+<p><code>Score = 50 + 15 × (wH·zH + wO·zO − wD·zD)</code> with the weights rescaled to sum to 1.</p></div>
+<div class="card"><h2>Data</h2>
+<p>Scores from the SportRadar feed. Games missing from the feed were filled from theScore, Wikipedia and team athletics sites. Records from the same feed. AP ranks from the Oct 25 poll.</p></div>
+</div>
+</section>
+
+<section class="panel" id="p-conf" hidden>
+<div class="grid">
+<div class="card">
+<h2>Opponent strength by conference</h2>
+<p class="exp" style="margin-top:0">Each opponent's win percentage is multiplied by its conference's value to get q. 1.00 takes a record at face value. At 0.70, a 6-1 record there counts about like a 4-3 record in a 1.00 conference. Values above 1.00 rate that conference's records as harder to earn than face value.</p>
+<div class="seg" id="conf-presets" style="flex-wrap:wrap"><button data-p="def" class="on">Default</button><button data-p="flat">No adjustment</button><button data-p="tier">Tiered Power 4</button><button data-p="harsh">Harsh on G5</button></div>
+<div id="conf-sliders"></div>
+<div class="ctl" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+<div class="ctl-top"><span>FCS opponents</span><b id="fcsv"></b></div>
+<div class="ctl-def">A fixed q for any FCS opponent, regardless of record. <span id="fcsn"></span></div>
+<input type="range" id="fcs" min="0" max="0.5" step="0.05" value="0.1">
+</div>
+</div>
+<div>
+<div class="card"><h2>Who moves</h2>
+<p class="exp" style="margin-top:0">Rank at these conference values compared with the default values, at your current Rankings sliders.</p>
+<div id="conf-move"></div></div>
+<div class="card" style="margin-top:16px"><h2>Schedule strength</h2>
+<p class="exp" style="margin-top:0">Average q of every opponent played. Default values in gray.</p>
+<div class="scroll" id="conf-sos"></div></div>
+</div>
+</div>
+</section>
+
+<section class="panel" id="p-ana" hidden>
+<nav class="subnav" role="tablist" aria-label="Analysis sections">
+<button class="sbtn on" data-sub="ins">Insights</button><button class="sbtn" data-sub="how">How the AP ranks</button><button class="sbtn" data-sub="con">Contradictions</button><button class="sbtn" data-sub="trend">Season trends</button><button class="sbtn" data-sub="lab">Stats lab</button>
+</nav>
+<div class="subp" data-sub="ins">
+<div class="metrics" id="kpis"></div>
+<div class="sec"><h2>What stands out</h2><p class="lede">Specific cases pulled from cross-referencing every game, poll and model fit, ranked by strength of evidence. They update with your recency and conference settings.</p>
+<div class="fgrid" id="topline"></div></div>
+</div>
+<div class="subp" data-sub="how" hidden>
+<div class="card"><h2>The AP's implied weights</h2>
+<p class="lede">For each poll, every mix of H2H, offense, defense and preseason reputation in 5% steps (1,770 mixes), at five recency settings and 33 conference settings (Group of 5 value 0 to 1.0, Big 12 and ACC value 0.8 to 1.0), is scored against that week's AP points, and the best fit is kept. Each team's stats use only games played before that poll. This is the AP's ballot translated into your four sliders.</p>
+<div class="metrics" id="imp-now"></div>
+<div id="imp-read" class="tl" style="border:0;padding:12px 0 0"></div>
+<div id="imp-chart" style="margin-top:8px"></div>
+<div class="scroll" id="imp-table" style="margin-top:12px"></div>
+<div class="note">Fit r is the Pearson correlation between the weighted score and AP points, among the tracked teams ranked that week. Every team ranked at any point this season is tracked, and each poll is fit on the tracked teams ranked that week (the Teams column). Opponent strength uses each opponent's current record, so early-week q values carry some hindsight. Early polls fit almost perfectly because the AP had barely moved off its preseason order.</div></div><div class="sec card"><h2>Agreement with the AP poll</h2>
+<p class="lede">Three correlation measures between the résumé model at your current weights and the Oct 25 AP poll. Pearson uses the raw scores and AP points. Spearman and Kendall use only the order. Kendall τ-b corrects for ties, including every unranked team sharing rank 26. Unranked teams use their others-receiving-votes points where they have them.</p>
+<div class="metrics" id="agree"></div></div><div class="sec card"><h2>Résumé score vs AP points</h2>
+<p class="lede">Each dot is a team. The dashed line is the least-squares fit. Distance from the line is how far the AP sits from the résumé.</p>
+<div id="scatter"></div><div class="note" id="fit"></div></div>
+</div>
+<div class="subp" data-sub="con" hidden>
+<div class="sec card"><h2>Head-to-head inversions</h2><p class="lede">Teams ranked behind a team they beat in the current poll. "Inverted for" counts consecutive polls the inversion has stood.</p><div class="scroll" id="con-h2h"></div></div>
+<div class="sec card"><h2>More losses, ranked ahead</h2><p class="lede">Ranked pairs where the team with more losses sits higher, and whether the H2H résumé justifies it.</p><div class="scroll" id="con-rec"></div></div>
+<div class="sec card"><h2>How losses were punished</h2><p class="lede">Every loss by a ranked team, compared with what a typical loss of that kind costs.</p><div id="con-loss"></div></div>
+<div class="sec card"><h2>Fell after a win</h2><p class="lede">Ranked teams that dropped 2 or more spots in a week they won.</p><div class="scroll" id="con-win"></div></div>
+</div>
+<div class="subp" data-sub="trend" hidden>
+<div class="card"><h2>Season history</h2>
+<p class="lede">AP rank for every tracked team across every poll since preseason. NR means unranked that week. Labels show this week's top 25; pick any team, ranked or not, to trace it. On a phone, swipe the chart sideways.</p>
+<select id="hl"></select><div id="bump" style="margin-top:8px"></div></div><div class="sec card"><h2>Poll inertia</h2>
+<p class="lede">How much each AP poll is a copy of the last one. Spearman ρ between consecutive polls, average rank movement, and how fast the preseason order is fading. Unranked teams are scored 26.</p>
+<div class="metrics" id="ar"></div><div class="scroll" style="margin-top:12px" id="ts-table"></div></div><div class="sec card"><h2>Preseason anchoring</h2>
+<p class="lede">Does preseason position still drive the AP order after you account for results? The partial correlation removes the part of the AP order that the résumé model already explains. It updates with the sliders.</p>
+<div class="metrics" id="anchor"></div><div class="note" id="anchor-read"></div></div>
+</div>
+<div class="subp" data-sub="lab" hidden>
+<div class="card"><h2>Correlation matrix</h2>
+<p class="lede">Every input against every other. Blue is positive, red is negative, and * marks p &lt; .05. Defense is flipped so higher is better, and preseason is flipped so a higher value means a better preseason rank.</p>
+<div class="seg"><button data-m="pearson" class="on">Pearson r</button><button data-m="spearman">Spearman ρ</button></div>
+<div class="scroll" id="matrix"></div></div><div class="sec card"><h2>Preseason ranked vs unranked</h2>
+<p class="lede">Which tracked teams were in the preseason poll, split by top 12 and everyone else in each ranking. A low p-value means preseason status and current placement are linked. This is a chi-square style test of independence, run as Fisher's exact test because several cells have fewer than 5 teams and the chi-square approximation breaks down there.</p>
+<div class="scroll" id="cont"></div></div><div class="sec card"><h2>Weight sensitivity</h2>
+<p class="lede">Every combination of the three sliders in steps of 10 (1,330 settings), with the tiebreak set as it is now. The line is each team's best to worst rank, the box is the middle half, the dot is your current weights and the red tick is the AP rank. Short lines are teams whose spot doesn't depend on how you weight things.</p>
+<div id="sens"></div></div><div class="defs">
+<div class="card"><h2>Pearson r</h2><p>Linear relationship between two continuous variables. Used for résumé score against AP points and in the matrix.</p></div>
+<div class="card"><h2>Spearman ρ</h2><p>Pearson on ranks. Used wherever the data is an ordering, and as the robust version in the matrix since AP points are skewed.</p></div>
+<div class="card"><h2>Kendall τ-b</h2><p>Share of team pairs both rankings put in the same order, corrected for ties. The cleanest read on ranking agreement with a small sample.</p></div>
+<div class="card"><h2>Fisher's exact</h2><p>Stands in for chi-square on the preseason table, since the expected cell counts are under 5.</p></div>
+<div class="card"><h2>AR(1) and lag correlation</h2><p>The time series piece. Nine polls is too short for ARIMA, VAR or Granger, which need dozens of periods. An AR(1) slope pooled across team-weeks and week-over-week ρ measure the same thing those models would: how much the poll depends on itself.</p></div>
+<div class="card"><h2>Data</h2><p>AP polls from Aug 17 through Oct 25, 2026, from LSU Athletics' weekly rankings posts, NCAA.com, FootballScoop and FBSchedules. Point totals for Sep 8 to Sep 27 come from one source each.</p></div>
+</div>
+</div>
+</section>
+</div>
+
+<script>
+const DATA=[["Miami (FL)","ACC",7,0,[["Stanford","A",45,6,0.571,"ACC",4,4,"2026-09-04"],["Florida A&M","H",77,7,0.1,"FCS",null,null,"2026-09-10"],["Wake Forest","A",33,20,1.0,"ACC",6,1,"2026-09-18"],["Central Michigan","H",52,3,0.429,"MAC",3,5,"2026-09-26"],["Clemson","A",41,13,0.667,"ACC",4,3,"2026-10-03"],["Florida State","H",43,35,0.5,"ACC",3,4,"2026-10-17"],["Pittsburgh","H",52,23,0.714,"ACC",5,3,"2026-10-24"]]],["Ohio State","B1G",6,1,[["Ball State","H",56,3,0.429,"MAC",3,5,"2026-09-05"],["Texas","A",23,24,0.667,"SEC",5,2,"2026-09-12"],["Kent State","H",59,3,0.429,"MAC",3,5,"2026-09-19"],["Illinois","H",42,19,0.667,"B1G",4,3,"2026-09-26"],["Iowa","A",31,14,0.833,"B1G",5,2,"2026-10-03"],["Maryland","H",45,16,0.333,"B1G",2,5,"2026-10-10"],["Indiana","A",19,15,1.0,"B1G",7,1,"2026-10-17"]]],["Georgia","SEC",6,1,[["Tennessee State","H",63,3,0.1,"FCS",null,null,"2026-09-05"],["Western Kentucky","H",70,20,0.5,"CUSA",3,4,"2026-09-12"],["Arkansas","A",45,10,0.5,"SEC",3,4,"2026-09-19"],["Oklahoma","H",41,13,0.667,"SEC",4,3,"2026-09-26"],["Vanderbilt","H",38,14,0.429,"SEC",3,5,"2026-10-03"],["Alabama","A",20,17,0.857,"SEC",6,2,"2026-10-10"],["Auburn","H",24,27,0.5,"SEC",4,3,"2026-10-17"]]],["Indiana","B1G",7,1,[["North Texas","H",52,16,0.833,"AAC",5,2,"2026-09-05"],["Howard","H",55,0,0.1,"FCS",null,null,"2026-09-12"],["Western Kentucky","H",38,0,0.5,"CUSA",3,4,"2026-09-19"],["Northwestern","H",29,23,1.0,"B1G",6,1,"2026-09-25"],["Rutgers","A",47,15,0.333,"B1G",2,5,"2026-10-03"],["Nebraska","A",20,17,0.833,"B1G",5,2,"2026-10-10"],["Ohio State","H",15,19,0.833,"B1G",6,1,"2026-10-17"],["Michigan","A",13,6,0.667,"B1G",4,3,"2026-10-24"]]],["Notre Dame","IND",6,1,[["Wisconsin","N",41,13,0.833,"B1G",5,2,"2026-09-06"],["Rice","H",52,0,0.143,"AAC",1,7,"2026-09-12"],["Michigan State","H",27,10,0.286,"B1G",2,6,"2026-09-19"],["Purdue","A",49,10,0.5,"B1G",3,4,"2026-09-26"],["North Carolina","A",37,26,0.667,"ACC",4,3,"2026-10-03"],["Stanford","H",58,7,0.571,"ACC",4,4,"2026-10-10"],["BYU","A",24,28,0.833,"B12",6,1,"2026-10-17"]]],["Utah","B12",7,0,[["Idaho","H",66,14,0.1,"FCS",null,null,"2026-09-03"],["Arkansas","H",43,10,0.5,"SEC",3,4,"2026-09-12"],["Utah State","H",33,0,0.333,"PAC",2,5,"2026-09-19"],["Iowa State","A",31,17,0.5,"B12",3,4,"2026-09-26"],["Kansas","H",41,24,0.5,"B12",3,4,"2026-10-10"],["Colorado","A",27,24,0.333,"B12",2,5,"2026-10-17"],["Houston","H",21,13,0.857,"B12",6,2,"2026-10-24"]]],["UCLA","B1G",7,0,[["California","A",45,24,0.429,"ACC",3,5,"2026-09-05"],["San Diego State","H",28,10,0.429,"PAC",3,5,"2026-09-12"],["Purdue","H",52,38,0.5,"B1G",3,4,"2026-09-19"],["Maryland","A",54,3,0.333,"B1G",2,5,"2026-09-26"],["Oregon","A",17,15,0.667,"B1G",4,3,"2026-10-10"],["Wisconsin","H",17,7,0.833,"B1G",5,2,"2026-10-17"],["Michigan State","H",28,10,0.286,"B1G",2,6,"2026-10-24"]]],["Boise State","PAC",6,1,[["Oregon","A",27,34,0.5,"B1G",4,3,"2026-09-05"],["Memphis","H",38,20,0.857,"AAC",6,2,"2026-09-12"],["South Dakota","H",38,24,0.1,"FCS",null,null,"2026-09-19"],["Western Michigan","A",32,7,0.714,"MAC",5,3,"2026-09-26"],["Utah State","H",37,18,0.333,"PAC",2,5,"2026-10-03"],["Fresno State","A",38,31,0.667,"PAC",4,3,"2026-10-10"],["Washington State","A",31,10,0.143,"PAC",1,7,"2026-10-24"]]],["Northwestern","B1G",6,1,[["South Dakota State","H",34,18,0.1,"FCS",null,null,"2026-09-05"],["Colorado","H",41,7,0.333,"B12",2,5,"2026-09-19"],["Indiana","A",23,29,0.857,"B1G",7,1,"2026-09-25"],["Penn State","H",34,13,0.5,"B1G",3,4,"2026-10-02"],["Ball State","H",45,14,0.429,"MAC",3,5,"2026-10-10"],["Michigan State","A",24,21,0.286,"B1G",2,6,"2026-10-17"],["Rutgers","H",42,14,0.333,"B1G",2,5,"2026-10-24"]]],["Arizona","B12",6,1,[["Northern Arizona","H",35,7,0.1,"FCS",null,null,"2026-09-05"],["BYU","A",17,28,0.833,"B12",6,1,"2026-09-12"],["Northern Illinois","H",42,17,0.0,"MWC",0,7,"2026-09-19"],["Washington State","A",34,24,0.143,"PAC",1,7,"2026-09-26"],["Cincinnati","H",34,7,0.833,"B12",5,2,"2026-10-03"],["West Virginia","A",52,31,0.714,"B12",5,3,"2026-10-10"],["Iowa State","H",39,3,0.5,"B12",3,4,"2026-10-24"]]],["Missouri","SEC",5,2,[["Arkansas-Pine Bluff","H",54,14,0.1,"FCS",null,null,"2026-09-03"],["Kansas","A",38,21,0.5,"B12",3,4,"2026-09-11"],["Troy","H",27,17,0.5,"SBC",3,4,"2026-09-19"],["Mississippi State","A",24,31,0.5,"SEC",4,3,"2026-09-26"],["Florida","H",45,17,0.833,"SEC",5,2,"2026-10-03"],["Texas A&M","H",27,6,0.571,"SEC",4,4,"2026-10-10"],["Ole Miss","A",3,31,0.667,"SEC",5,2,"2026-10-17"]]],["Oklahoma State","B12",5,2,[["Tulsa","A",10,24,0.429,"AAC",4,4,"2026-09-05"],["Oregon","H",39,31,0.667,"B1G",4,3,"2026-09-12"],["Murray State","H",59,0,0.1,"FCS",null,null,"2026-09-19"],["West Virginia","A",41,24,0.714,"B12",5,3,"2026-09-26"],["UCF","H",42,28,0.667,"B12",4,3,"2026-10-10"],["Houston","A",32,35,0.714,"B12",6,2,"2026-10-17"],["Colorado","H",57,24,0.333,"B12",2,5,"2026-10-24"]]],["Wisconsin","B1G",5,2,[["Notre Dame","N",13,41,0.833,"IND",6,1,"2026-09-06"],["Western Illinois","H",36,9,0.1,"FCS",null,null,"2026-09-12"],["Eastern Michigan","H",54,10,0.5,"MAC",4,5,"2026-09-19"],["Penn State","A",24,20,0.5,"B1G",3,4,"2026-09-26"],["Michigan State","H",31,3,0.286,"B1G",2,6,"2026-10-03"],["UCLA","A",7,17,1.0,"B1G",7,0,"2026-10-17"],["USC","H",24,7,0.857,"B1G",6,2,"2026-10-24"]]],["BYU","B12",6,1,[["Utah Tech","H",63,7,0.1,"FCS",null,null,"2026-09-05"],["Arizona","H",28,17,1.0,"B12",6,1,"2026-09-12"],["Colorado State","A",41,23,0.5,"PAC",3,4,"2026-09-19"],["TCU","A",17,10,0.5,"B12",3,4,"2026-10-03"],["Iowa State","H",24,10,0.5,"B12",3,4,"2026-10-09"],["Notre Dame","H",28,24,1.0,"IND",6,1,"2026-10-17"],["UCF","A",31,39,0.5,"B12",4,3,"2026-10-24"]]],["Kentucky","SEC",7,1,[["Youngstown State","H",45,13,0.1,"FCS",null,null,"2026-09-05"],["Alabama","H",17,45,0.714,"SEC",6,2,"2026-09-12"],["Texas A&M","A",31,21,0.571,"SEC",4,4,"2026-09-19"],["South Alabama","H",45,21,0.667,"SBC",4,3,"2026-09-26"],["South Carolina","A",35,34,0.667,"SEC",4,3,"2026-10-03"],["LSU","H",35,34,0.857,"SEC",6,2,"2026-10-10"],["Oklahoma","A",21,13,0.667,"SEC",4,3,"2026-10-17"],["Vanderbilt","H",34,17,0.429,"SEC",3,5,"2026-10-24"]]],["Alabama","SEC",6,2,[["East Carolina","H",48,10,0.5,"AAC",3,4,"2026-09-05"],["Kentucky","A",45,17,1.0,"SEC",7,1,"2026-09-12"],["Florida State","H",50,36,0.5,"ACC",3,4,"2026-09-19"],["South Carolina","H",49,18,0.667,"SEC",4,3,"2026-09-26"],["Mississippi State","A",56,23,0.667,"SEC",4,3,"2026-10-03"],["Georgia","H",17,20,0.833,"SEC",6,1,"2026-10-10"],["Tennessee","A",10,26,0.714,"SEC",6,2,"2026-10-17"],["Texas A&M","H",31,20,0.571,"SEC",4,4,"2026-10-24"]]],["Texas","SEC",5,2,[["Texas State","H",59,7,0.667,"PAC",4,3,"2026-09-05"],["Ohio State","H",24,23,1.0,"B1G",6,1,"2026-09-12"],["UTSA","H",30,6,1.0,"AAC",7,1,"2026-09-19"],["Tennessee","A",20,17,0.857,"SEC",6,2,"2026-09-26"],["Oklahoma","N",24,27,0.5,"SEC",4,3,"2026-10-10"],["Florida","H",24,27,0.667,"SEC",5,2,"2026-10-17"],["Ole Miss","H",34,27,0.833,"SEC",5,2,"2026-10-24"]]],["Ole Miss","SEC",5,2,[["Louisville","N",41,38,0.667,"ACC",4,3,"2026-09-06"],["Charlotte","H",41,9,0.167,"AAC",1,6,"2026-09-12"],["LSU","H",32,24,0.857,"SEC",6,2,"2026-09-19"],["Florida","A",28,52,0.667,"SEC",5,2,"2026-09-26"],["Vanderbilt","A",52,17,0.429,"SEC",3,5,"2026-10-10"],["Missouri","H",31,3,0.833,"SEC",5,2,"2026-10-17"],["Texas","A",27,34,0.667,"SEC",5,2,"2026-10-24"]]],["Texas Tech","B12",6,1,[["Abilene Christian","H",33,10,0.1,"FCS",null,null,"2026-09-05"],["Oregon State","A",35,24,0.833,"PAC",5,2,"2026-09-12"],["Houston","H",28,26,0.857,"B12",6,2,"2026-09-18"],["Sam Houston","H",49,14,0.167,"CUSA",1,6,"2026-09-26"],["Colorado","A",29,7,0.333,"B12",2,5,"2026-10-03"],["Arizona State","H",53,25,0.667,"B12",4,3,"2026-10-17"],["Cincinnati","A",24,37,0.667,"B12",5,2,"2026-10-24"]]],["Wake Forest","ACC",6,1,[["Akron","H",38,16,0.143,"MAC",1,7,"2026-09-03"],["Purdue","A",38,36,0.5,"B1G",3,4,"2026-09-12"],["Miami (FL)","H",20,33,1.0,"ACC",7,0,"2026-09-18"],["Louisville","A",30,27,0.667,"ACC",4,3,"2026-09-26"],["Stanford","H",57,3,0.571,"ACC",4,4,"2026-10-03"],["NC State","A",38,14,0.5,"ACC",3,4,"2026-10-10"],["California","A",41,7,0.429,"ACC",3,5,"2026-10-17"]]],["LSU","SEC",6,2,[["Clemson","H",51,10,0.667,"ACC",4,3,"2026-09-05"],["Louisiana Tech","H",45,14,0.833,"SBC",5,2,"2026-09-12"],["Ole Miss","A",24,32,0.667,"SEC",5,2,"2026-09-19"],["Texas A&M","H",35,6,0.571,"SEC",4,4,"2026-09-26"],["McNeese","H",63,14,0.1,"FCS",null,null,"2026-10-03"],["Kentucky","A",34,35,0.857,"SEC",7,1,"2026-10-10"],["Mississippi State","H",31,0,0.667,"SEC",4,3,"2026-10-17"],["Auburn","A",38,17,0.667,"SEC",4,3,"2026-10-24"]]],["Tennessee","SEC",6,2,[["Furman","H",56,9,0.1,"FCS",null,null,"2026-09-05"],["Georgia Tech","A",45,24,0.333,"ACC",2,5,"2026-09-12"],["Kennesaw State","H",42,9,0.167,"CUSA",1,6,"2026-09-19"],["Texas","H",17,20,0.667,"SEC",5,2,"2026-09-26"],["Auburn","H",24,14,0.667,"SEC",4,3,"2026-10-03"],["Arkansas","A",24,17,0.5,"SEC",3,4,"2026-10-10"],["Alabama","H",26,10,0.857,"SEC",6,2,"2026-10-17"],["South Carolina","A",24,27,0.5,"SEC",4,3,"2026-10-24"]]],["Florida","SEC",5,2,[["Florida Atlantic","H",66,21,0.833,"AAC",5,2,"2026-09-05"],["Campbell","H",52,3,0.1,"FCS",null,null,"2026-09-12"],["Auburn","A",44,39,0.667,"SEC",4,3,"2026-09-19"],["Ole Miss","H",52,28,0.833,"SEC",5,2,"2026-09-26"],["Missouri","A",17,45,0.667,"SEC",5,2,"2026-10-03"],["South Carolina","H",19,38,0.5,"SEC",4,3,"2026-10-10"],["Texas","A",27,24,0.833,"SEC",5,2,"2026-10-17"]]],["Houston","B12",6,2,[["Oregon State","H",33,20,0.833,"PAC",5,2,"2026-09-05"],["Southern","H",77,6,0.1,"FCS",null,null,"2026-09-12"],["Texas Tech","A",26,28,0.833,"B12",6,1,"2026-09-18"],["Georgia Southern","A",42,28,0.5,"SBC",3,4,"2026-09-26"],["UCF","H",27,17,0.667,"B12",4,3,"2026-10-03"],["Kansas State","A",35,16,0.667,"B12",4,3,"2026-10-10"],["Oklahoma State","H",35,32,0.833,"B12",5,2,"2026-10-17"],["Utah","A",13,21,1.0,"B12",7,0,"2026-10-24"]]],["SMU","ACC",6,1,[["Florida State","A",27,24,0.5,"ACC",3,4,"2026-09-07"],["UC Davis","H",56,10,0.1,"FCS",null,null,"2026-09-12"],["Louisville","A",31,41,0.5,"ACC",4,3,"2026-09-19"],["Missouri State","H",34,24,0.333,"CUSA",2,5,"2026-09-26"],["Boston College","H",25,16,0.667,"ACC",4,3,"2026-10-03"],["Virginia","H",23,13,0.571,"ACC",4,4,"2026-10-17"],["California","H",59,20,0.429,"ACC",3,5,"2026-10-24"]]],["Oregon","B1G",4,3,[["Boise State","H",34,27,1.0,"PAC",6,1,"2026-09-05"],["Oklahoma State","A",31,39,0.667,"B12",5,2,"2026-09-12"],["Portland State","H",84,0,0.1,"FCS",null,null,"2026-09-18"],["USC","A",41,27,0.857,"B1G",6,2,"2026-09-26"],["UCLA","H",15,17,1.0,"B1G",7,0,"2026-10-10"],["Nebraska","H",17,14,0.833,"B1G",5,2,"2026-10-17"],["Illinois","A",10,21,0.5,"B1G",4,3,"2026-10-24"]]],["Texas A&M","SEC",4,4,[["Missouri State","H",50,0,0.333,"CUSA",2,5,"2026-09-05"],["Arizona State","H",48,20,0.667,"B12",4,3,"2026-09-12"],["Kentucky","H",21,31,0.857,"SEC",7,1,"2026-09-19"],["LSU","A",6,35,0.714,"SEC",6,2,"2026-09-26"],["Arkansas","H",34,7,0.5,"SEC",3,4,"2026-10-03"],["Missouri","A",6,27,0.667,"SEC",5,2,"2026-10-10"],["The Citadel","H",41,0,0.1,"FCS",null,null,"2026-10-17"],["Alabama","A",20,31,0.714,"SEC",6,2,"2026-10-24"]]],["Oklahoma","SEC",4,3,[["UTEP","H",51,0,0.167,"MWC",1,6,"2026-09-04"],["Michigan","A",10,17,0.5,"B1G",4,3,"2026-09-12"],["New Mexico","H",14,6,1.0,"MWC",6,1,"2026-09-19"],["Georgia","A",13,41,0.833,"SEC",6,1,"2026-09-26"],["Texas","N",27,24,0.833,"SEC",5,2,"2026-10-10"],["Kentucky","H",13,21,0.857,"SEC",7,1,"2026-10-17"],["Mississippi State","A",23,15,0.667,"SEC",4,3,"2026-10-24"]]],["USC","B1G",6,2,[["San Jose State","H",42,26,0.571,"MWC",4,4,"2026-08-29"],["Fresno State","H",39,0,0.667,"PAC",4,3,"2026-09-04"],["Louisiana","H",49,30,0.714,"SBC",5,3,"2026-09-12"],["Rutgers","A",42,35,0.333,"B1G",2,5,"2026-09-19"],["Oregon","H",27,41,0.5,"B1G",4,3,"2026-09-26"],["Washington","H",25,21,0.667,"B1G",4,3,"2026-10-03"],["Penn State","A",31,23,0.5,"B1G",3,4,"2026-10-10"],["Wisconsin","A",7,24,0.667,"B1G",5,2,"2026-10-24"]]],["Michigan","B1G",4,3,[["Western Michigan","H",13,12,0.714,"MAC",5,3,"2026-09-05"],["Oklahoma","H",17,10,0.667,"SEC",4,3,"2026-09-12"],["UTEP","H",52,17,0.167,"MWC",1,6,"2026-09-19"],["Iowa","H",19,20,0.667,"B1G",5,2,"2026-09-26"],["Minnesota","A",14,20,0.667,"B1G",5,2,"2026-10-03"],["Penn State","H",21,18,0.5,"B1G",3,4,"2026-10-17"],["Indiana","H",6,13,0.857,"B1G",7,1,"2026-10-24"]]],["Washington","B1G",4,3,[["Washington State","H",24,10,0.143,"PAC",1,7,"2026-09-06"],["Utah State","H",16,14,0.333,"PAC",2,5,"2026-09-12"],["Eastern Washington","H",48,16,0.1,"FCS",null,null,"2026-09-19"],["Minnesota","H",24,27,0.667,"B1G",5,2,"2026-09-26"],["USC","A",21,25,0.714,"B1G",6,2,"2026-10-03"],["Iowa","H",24,41,0.667,"B1G",5,2,"2026-10-09"],["Purdue","A",38,26,0.5,"B1G",3,4,"2026-10-17"]]],["Penn State","B1G",3,4,[["Marshall","H",45,0,0.667,"SBC",4,3,"2026-09-05"],["Temple","A",27,9,0.333,"AAC",2,5,"2026-09-12"],["Buffalo","H",55,13,0.714,"MAC",5,3,"2026-09-19"],["Wisconsin","H",20,24,0.667,"B1G",5,2,"2026-09-26"],["Northwestern","A",13,34,0.833,"B1G",6,1,"2026-10-02"],["USC","H",23,31,0.714,"B1G",6,2,"2026-10-10"],["Michigan","A",18,21,0.5,"B1G",4,3,"2026-10-17"]]],["Louisville","ACC",4,3,[["Ole Miss","N",38,41,0.667,"SEC",5,2,"2026-09-06"],["Villanova","H",59,13,0.1,"FCS",null,null,"2026-09-11"],["SMU","H",41,31,1.0,"ACC",6,1,"2026-09-19"],["Wake Forest","H",27,30,0.833,"ACC",6,1,"2026-09-26"],["NC State","A",28,31,0.333,"ACC",3,4,"2026-10-03"],["Florida State","H",44,20,0.5,"ACC",3,4,"2026-10-09"],["Syracuse","A",34,26,0.5,"ACC",3,4,"2026-10-17"]]],["Iowa","B1G",5,2,[["Northern Illinois","H",40,0,0.0,"MWC",0,7,"2026-09-05"],["Iowa State","H",16,13,0.5,"B12",3,4,"2026-09-12"],["Northern Iowa","H",55,0,0.1,"FCS",null,null,"2026-09-19"],["Michigan","A",20,19,0.667,"B1G",4,3,"2026-09-26"],["Ohio State","H",14,31,0.833,"B1G",6,1,"2026-10-03"],["Washington","A",41,24,0.667,"B1G",4,3,"2026-10-09"],["Minnesota","A",10,13,0.667,"B1G",5,2,"2026-10-24"]]],["Virginia","ACC",4,4,[["NC State","H",34,8,0.5,"ACC",3,4,"2026-08-29"],["Norfolk State","H",59,3,0.1,"FCS",null,null,"2026-09-11"],["West Virginia","N",27,38,0.571,"B12",5,3,"2026-09-19"],["Delaware","H",42,3,0.5,"CUSA",3,4,"2026-09-26"],["Florida State","A",7,38,0.333,"ACC",3,4,"2026-10-03"],["Syracuse","H",28,25,0.5,"ACC",3,4,"2026-10-10"],["SMU","A",13,23,0.833,"ACC",6,1,"2026-10-17"],["Duke","H",16,19,0.667,"ACC",5,2,"2026-10-23"]]],["Mississippi State","SEC",4,3,[["Louisiana-Monroe","H",62,13,0.167,"SBC",1,6,"2026-09-05"],["Minnesota","A",38,13,0.833,"B1G",5,2,"2026-09-12"],["South Carolina","A",41,34,0.667,"SEC",4,3,"2026-09-19"],["Missouri","H",31,24,0.833,"SEC",5,2,"2026-09-26"],["Alabama","H",23,56,0.714,"SEC",6,2,"2026-10-03"],["LSU","A",0,31,0.714,"SEC",6,2,"2026-10-17"],["Oklahoma","H",15,23,0.5,"SEC",4,3,"2026-10-24"]]],["Pittsburgh","ACC",5,3,[["Miami (OH)","H",59,14,0.714,"MAC",5,3,"2026-09-05"],["UCF","H",12,7,0.667,"B12",4,3,"2026-09-12"],["Syracuse","H",27,13,0.5,"ACC",3,4,"2026-09-17"],["Bucknell","H",59,0,0.1,"FCS",null,null,"2026-09-26"],["Virginia Tech","A",35,33,0.857,"ACC",6,2,"2026-10-02"],["North Carolina","H",17,21,0.5,"ACC",4,3,"2026-10-10"],["Boston College","A",21,27,0.5,"ACC",4,3,"2026-10-17"],["Miami (FL)","A",23,52,1.0,"ACC",7,0,"2026-10-24"]]]];
+const POLLS={"2026-08-17":[["Ohio State",1,1672],["Oregon",2,1597],["Georgia",3,1513],["Notre Dame",4,1510],["Texas",5,1483],["Indiana",6,1440],["Miami (FL)",7,1379],["Texas A&M",8,1131],["Ole Miss",9,1102],["Oklahoma",10,1047],["LSU",11,988],["Texas Tech",12,983],["Alabama",13,904],["BYU",14,839],["USC",14,839],["Michigan",16,718],["Washington",17,501],["Penn State",18,482],["SMU",19,434],["Tennessee",20,394],["Utah",21,304],["Iowa",22,260],["Houston",23,252],["Louisville",24,194],["Missouri",25,117]],"2026-09-08":[["Ohio State",1,1684],["Georgia",2,1532],["Notre Dame",3,1512],["Texas",4,1462],["Indiana",5,1428],["Oregon",6,1422],["Miami (FL)",7,1405],["LSU",8,1315],["Ole Miss",9,1154],["Texas A&M",10,1079],["Oklahoma",11,1039],["Alabama",12,910],["Texas Tech",13,900],["USC",14,861],["BYU",15,840],["Penn State",16,621],["SMU",17,501],["Tennessee",18,491],["Washington",19,489],["Utah",20,381],["Iowa",21,369],["Houston",22,214],["Missouri",23,182],["Louisville",24,163],["Virginia",25,89]],"2026-09-13":[["Texas",1,1678],["Georgia",2,1551],["Notre Dame",3,1531],["Indiana",4,1466],["Miami (FL)",5,1452],["Ohio State",6,1407],["LSU",7,1334],["Ole Miss",8,1216],["Texas A&M",9,1165],["Alabama",10,1068],["BYU",11,966],["USC",12,944],["Texas Tech",13,910],["Penn State",14,692],["Tennessee",15,676],["SMU",16,636],["Utah",17,558],["Iowa",18,391],["Michigan",19,382],["Missouri",20,344],["Oregon",21,324],["Houston",22,292],["Louisville",23,244],["Oklahoma",24,222],["Virginia",25,182]],"2026-09-20":[["Texas",1,1706],["Georgia",2,1580],["Notre Dame",3,1517],["Ole Miss",4,1488],["Indiana",5,1467],["Miami (FL)",6,1445],["Ohio State",7,1415],["Alabama",8,1182],["BYU",9,1090],["LSU",10,1078],["Texas Tech",11,1067],["USC",12,907],["Penn State",13,850],["Tennessee",14,826],["Utah",15,752],["Louisville",16,692],["Iowa",17,561],["Michigan",18,432],["Missouri",19,369],["Oregon",20,364],["Florida",21,269],["SMU",22,212],["Texas A&M",23,202],["Mississippi State",24,179],["Houston",25,127]],"2026-09-27":[["Texas",1,1737],["Georgia",2,1646],["Notre Dame",3,1581],["Miami (FL)",4,1501],["Ohio State",5,1465],["Indiana",6,1408],["Alabama",7,1305],["Florida",8,1272],["Ole Miss",9,1089],["BYU",10,1078],["LSU",11,1073],["Texas Tech",12,1053],["Utah",13,903],["Iowa",14,856],["Oregon",15,725],["Mississippi State",16,715],["Tennessee",17,663],["USC",18,410],["Oklahoma State",19,345],["Houston",20,278],["SMU",21,246],["Boise State",22,221],["UCLA",23,218],["Kentucky",24,150],["Missouri",25,118]],"2026-10-04":[["Texas",1,1737],["Georgia",2,1647],["Notre Dame",3,1532],["Miami (FL)",4,1524],["Ohio State",5,1490],["Alabama",6,1460],["Indiana",7,1380],["BYU",8,1144],["Ole Miss",9,1095],["LSU",10,1087],["Texas Tech",11,1062],["Utah",12,996],["Oregon",13,831],["Missouri",14,755],["Tennessee",15,746],["Florida",16,691],["Mississippi State",17,487],["Oklahoma State",18,477],["USC",19,439],["Iowa",20,367],["UCLA",21,287],["Houston",22,279],["Boise State",23,271],["SMU",24,167],["Pittsburgh",25,162]],"2026-10-11":[["Georgia",1,1745],["Notre Dame",2,1630],["Miami (FL)",3,1594],["Ohio State",4,1508],["Indiana",5,1461],["Alabama",6,1372],["Texas",7,1371],["BYU",8,1237],["Ole Miss",9,1135],["Texas Tech",10,1132],["Utah",11,1073],["UCLA",12,951],["Missouri",13,882],["Tennessee",14,706],["Kentucky",15,655],["Mississippi State",16,650],["Iowa",17,621],["Oklahoma State",18,604],["USC",19,505],["Houston",20,380],["Wake Forest",21,326],["LSU",22,274],["Boise State",23,268],["SMU",24,142],["Northwestern",25,112]],"2026-10-18":[["Miami (FL)",1,1697],["BYU",2,1675],["Ohio State",3,1649],["Notre Dame",4,1395],["Georgia",5,1382],["Indiana",6,1370],["Ole Miss",7,1360],["Texas Tech",8,1336],["UCLA",9,1159],["Utah",10,1153],["Tennessee",11,1152],["Kentucky",12,932],["Alabama",13,870],["Houston",14,785],["Iowa",15,747],["USC",16,592],["Wake Forest",17,574],["LSU",18,529],["Texas",19,440],["Florida",20,355],["Boise State",21,295],["Missouri",22,290],["SMU",23,265],["Northwestern",24,254],["Arizona",25,136]],"2026-10-25":[["Miami (FL)",1,1735],["Ohio State",2,1681],["Georgia",3,1511],["Indiana",4,1459],["Notre Dame",5,1458],["Utah",6,1413],["UCLA",7,1398],["BYU",8,1325],["Kentucky",9,1185],["Alabama",10,1063],["Texas",11,966],["Ole Miss",12,871],["Texas Tech",13,861],["Wake Forest",14,822],["LSU",15,813],["Tennessee",16,662],["Florida",17,556],["Houston",18,491],["SMU",19,440],["Boise State",20,422],["Northwestern",20,422],["Arizona",22,400],["Missouri",23,329],["Oklahoma State",24,180],["Wisconsin",25,125]]};
+const ORV={"2026-10-25":[["Iowa",76],["New Mexico",41],["Cincinnati",11],["Oregon State",10],["South Carolina",8],["Minnesota",7],["USC",7],["UTSA",1],["Virginia Tech",1]],"2026-10-18":[["Oklahoma State",128],["Oregon",79],["Auburn",61],["James Madison",52],["Mississippi State",30],["New Mexico",6],["Oregon State",3]],"2026-10-11":[["Wisconsin",92],["Oregon",86],["Arizona",82],["Nebraska",65],["Oklahoma",44],["James Madison",29],["Florida",9],["Duke",5],["New Mexico",3],["Oregon State",1]],"2026-10-04":[["Kentucky",160],["Wake Forest",142],["Wisconsin",88],["Duke",83],["Northwestern",59],["Nebraska",48],["Minnesota",19],["Arizona",19],["James Madison",12],["North Dakota State",7]],"2026-09-27":[["Wisconsin",102],["Duke",101],["Penn State",98],["Wake Forest",88],["Virginia Tech",86],["Michigan",54],["Pittsburgh",52],["Nebraska",36],["Louisville",25],["Cincinnati",20],["James Madison",10],["Arizona",8],["Minnesota",7],["North Dakota State",6],["Northwestern",1]],"2026-09-20":[["Washington",107],["Kentucky",98],["West Virginia",93],["Oklahoma",91],["Oklahoma State",50],["Boise State",48],["Virginia Tech",46],["Western Michigan",27],["Duke",20],["Tulsa",18],["Arizona",12],["Pittsburgh",10],["UCLA",10],["James Madison",7],["North Dakota State",6],["Kansas State",3],["Nebraska",2]],"2026-09-13":[["Washington",172],["Florida",83],["Boise State",57],["Oklahoma State",36],["Western Michigan",35],["Tulsa",18],["Mississippi State",17],["South Carolina",15],["Virginia Tech",11],["UCLA",9],["James Madison",6],["Arizona",5],["North Dakota State",3],["Pittsburgh",1],["Kansas State",1]],"2026-09-08":[["Boise State",86],["Florida",83],["Michigan",69],["Arizona",33],["Memphis",23],["South Carolina",19],["Western Michigan",12],["Pittsburgh",11],["Navy",10],["UCLA",7],["Virginia Tech",6],["Illinois",6],["James Madison",4],["Minnesota",4],["Colorado",3],["Auburn",2],["Arizona State",2],["Vanderbilt",2]],"2026-08-17":[["Clemson",112],["Florida",51],["Boise State",43],["Arizona",32],["TCU",11],["Navy",10],["South Carolina",10],["Illinois",9],["Oklahoma State",8],["Vanderbilt",8],["Pittsburgh",7],["Virginia Tech",6],["Minnesota",5],["UNLV",4],["New Mexico",4],["Georgia Tech",4],["James Madison",3],["Auburn",3],["Memphis",2],["California",2],["Liberty",1],["Western Michigan",1],["Tulane",1],["Virginia",1]]};
+
+const AP={"Miami (FL)":1,"Ohio State":2,"Georgia":3,"Indiana":4,"Notre Dame":5,"Utah":6,"UCLA":7,"BYU":8,"Kentucky":9,"Alabama":10,"Texas":11,"Ole Miss":12,"Texas Tech":13,"Wake Forest":14,"LSU":15,"Tennessee":16,"Florida":17,"Houston":18,"SMU":19,"Boise State":20,"Northwestern":20,"Arizona":22,"Missouri":23,"Oklahoma State":24,"Wisconsin":25};
+const POWER=new Set(["SEC","B1G","B12","ACC","IND"]);
+const NAMES=new Set(DATA.map(d=>d[0]));
+const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
+const r1=x=>Math.round(x*10)/10, r2=x=>Math.round(x*100)/100;
+const sg=x=>(x>=0?"+":"−")+Math.abs(x).toFixed(Math.abs(x)<10?1:0);
+
+const CONF_INFO=[["SEC","SEC",1,"P"],["B1G","Big Ten",1,"P"],["B12","Big 12",1,"P"],["ACC","ACC",1,"P"],["IND","Notre Dame",1,"P"],["AAC","American",0.7,"G"],["MWC","Mountain West",0.7,"G"],["PAC","Pac-12",0.7,"G"],["SBC","Sun Belt",0.7,"G"],["MAC","MAC",0.7,"G"],["CUSA","Conference USA",0.7,"G"],["FBSI","FBS independents",0.7,"G"]];
+const CONF_NAME=Object.fromEntries(CONF_INFO.map(c=>[c[0],c[1]]));CONF_NAME.FCS="FCS";
+const CONF_DEF=Object.fromEntries(CONF_INFO.map(c=>[c[0],c[2]]));const FCS_DEF=0.10;
+const CONF_W={...CONF_DEF};let FCS_Q=FCS_DEF;
+const qOf=(qr,c)=>c==="FCS"?FCS_Q:qr*(CONF_W[c]??0.7);
+const T=DATA.map(([t,conf,W,L,g])=>({t,conf,W,L,ap:AP[t]||26,rec:W+"-"+L,
+raw:g.map(([o,s,pf,pa,qr,c,ow,ol,dt])=>({o,s,pf,pa,qr,c,ow,ol,dt})),
+beat:g.filter(x=>x[2]>x[3]&&NAMES.has(x[0])).map(x=>x[0])}));
+const PRE_WK=Object.keys(POLLS).sort()[0];
+T.forEach(r=>{const e=POLLS[PRE_WK].find(x=>x[0]===r.t);r.pre=e?e[2]:0;r.preRank=e?e[1]:null});
+const SEASON_START="2026-09-03",REF_DATE="2026-10-25";let REC=0;
+const dayDiff=(a,b)=>(new Date(a)-new Date(b))/864e5;
+function recW(dt,ref,rec){const span=Math.max(dayDiff(ref,SEASON_START),1),age=Math.min(Math.max(dayDiff(ref,dt),0)/span,1);return 1-(rec/100)*0.8*age}
+const wavg=(v,w)=>{let s=0,t=0;for(let i=0;i<v.length;i++){s+=v[i]*w[i];t+=w[i]}return s/(t||1)};
+const ZSTAT={};
+function recalcT(){
+T.forEach(r=>{r.games=r.raw.map(x=>{const q=qOf(x.qr,x.c),w=x.pf>x.pa,m=Math.abs(x.pf-x.pa);
+let v=w?1+q:q-0.5;if(w)v+=x.s==="A"?0.1:x.s==="N"?0.05:0;else{if(x.s==="H")v-=0.1;if(m<=7)v+=0.1}
+return{...x,q,w,v,oa:Math.min(x.pf,56)*(0.6+0.8*q),da:x.pa*(1.4-0.8*q)}});
+const g=r.games,gw=g.map(x=>recW(x.dt,REF_DATE,REC));g.forEach((x,i)=>x.rw=gw[i]);r.h=wavg(g.map(x=>x.v),gw);r.o=wavg(g.map(x=>x.oa),gw);r.d=wavg(g.map(x=>x.da),gw);r.sos=avg(g.map(x=>x.q));r.ppg=avg(g.map(x=>x.pf));r.papg=avg(g.map(x=>x.pa))});
+["h","o","d","pre"].forEach(k=>{const v=T.map(r=>r[k]),m=avg(v),s=Math.sqrt(avg(v.map(x=>(x-m)**2)))||1;ZSTAT[k]={m,s};T.forEach(r=>r["z"+(k==="pre"?"p":k)]=(r[k]-m)/s)})}
+recalcT();
+
+const $=id=>document.getElementById(id);
+const apS=r=>r.ap>25?"NR":r.ap;
+let baseline=null,lastSwaps=[];
+
+function compute(wh,wo,wd,wp,h2h){
+const tot=wh+wo+wd+wp||1,f={h:wh/tot,o:wo/tot,d:wd/tot,p:wp/tot};
+const S={};T.forEach(r=>{const ph=15*f.h*r.zh,po=15*f.o*r.zo,pd=-15*f.d*r.zd,pp=15*f.p*r.zp;S[r.t]={ph,po,pd,pp,s:50+ph+po+pd+pp}});
+let L=[...T].sort((a,b)=>S[b.t].s-S[a.t].s).map(r=>r.t);
+const swaps=[];
+if(h2h){for(let p=0;p<15;p++){let ch=false;
+for(const name of [...L]){const r=T.find(x=>x.t===name);
+for(const lo of r.beat){const i=L.indexOf(name),j=L.indexOf(lo);
+const loT=T.find(x=>x.t===lo);
+if(j>=0&&j<i&&S[lo].s-S[name].s<6&&!loT.beat.includes(name)){L.splice(i,1);L.splice(j,0,name);ch=true;
+if(!swaps.find(s=>s[0]===name&&s[1]===lo))swaps.push([name,lo,S[lo].s-S[name].s])}}}
+if(!ch)break}}
+return{f,S,L,swaps}}
+
+function read(){return[+$("wh").value,+$("wo").value,+$("wd").value,+$("wp").value,$("h2h").checked,+$("rec").value]}
+
+function renderControls(st){
+const[wh,wo,wd,wp]=read();
+$("whv").textContent=wh;$("wov").textContent=wo;$("wdv").textContent=wd;$("wpv").textContent=wp;
+$("recv").textContent=REC;$("recd").textContent=REC===0?"Every game counts the same. Raise it to count recent games more than early ones.":`Last week's game counts 100%. A game from week 1 counts ${Math.round(100-0.8*REC)}%, with games in between scaled by date.`;
+const ph=Math.round(st.f.h*100),po=Math.round(st.f.o*100),pp=Math.round(st.f.p*100),pd=100-ph-po-pp;
+$("mh").style.width=st.f.h*100+"%";$("mo").style.width=st.f.o*100+"%";$("md").style.width=st.f.d*100+"%";$("mp").style.width=st.f.p*100+"%";
+$("sh").textContent="H2H "+ph+"%";$("so").textContent="Off "+po+"%";$("sd").textContent="Def "+pd+"%";$("sp").textContent=pp?"Pre "+pp+"%":"";
+$("formula").textContent="Score = 50 + 15 × ("+st.f.h.toFixed(2)+"·zH + "+st.f.o.toFixed(2)+"·zO − "+st.f.d.toFixed(2)+"·zD"+(st.f.p?" + "+st.f.p.toFixed(2)+"·zPre":"")+")";}
+
+function renderList(st){
+const html=st.L.map((t,i)=>{const r=T.find(x=>x.t===t),p=st.S[t];
+const d=r.ap>25?0:r.ap-(i+1),cls=d>0?"up":d<0?"dn":"flat",arr=r.ap>25?"":d>0?"▲"+d:d<0?"▼"+(-d):"–";
+let pos=50,neg=50,segs="";
+[["ph","--h"],["po","--o"],["pd","--d"],["pp","--p"]].forEach(([k,c])=>{const v=p[k]*1.4;
+if(v>=0){segs+=`<span style="left:${pos}%;width:${v}%;background:var(${c})"></span>`;pos+=v}
+else{neg+=v;segs+=`<span style="left:${neg}%;width:${-v}%;background:var(${c})"></span>`}});
+return`${i===25?`<div class="tlh" style="margin:14px 0 4px;color:var(--mute)">Outside the top 25</div>`:""}<div class="rk"><span class="n">${i+1}</span><div style="min-width:0">
+<div class="t"><span>${t}<span class="rec">${r.rec}</span>${(st.swaps.find(s=>s[0]===t)?`<span class="rec" style="color:var(--acc)"> · beat ${st.swaps.filter(s=>s[0]===t).map(s=>s[1]).join(", ")}</span>`:"")}</span><span style="font-weight:600">${p.s.toFixed(1)}</span></div>
+<div class="dv"><span class="mid"></span>${segs}</div>
+<div class="parts">${[["h","ph","H2H"],["o","po","Off"],["d","pd","Def"],["p","pp","Pre"]].filter(([k])=>st.f[k]>0).map(([k,pk,n])=>`<span style="color:var(--${k})">${n} <b>${sg(p[pk])}</b></span>`).join("")}</div>
+</div><span class="ap ${cls}">AP ${apS(r)}<br>${arr}</span></div>`}).join("");
+$("list").innerHTML=html;
+$("swaps").innerHTML=st.swaps.length?st.swaps.map(([w,l,g])=>`<div class="mv-row"><span>${w} placed above ${l}</span><span class="why">Won the game; was ${g.toFixed(1)} pts behind on score</span></div>`).join(""):`<div class="empty">${$("h2h").checked?"None needed at these weights.":"Tiebreak is off."}</div>`;}
+
+const LABEL={h:"H2H résumé",o:"offense",d:"defense",p:"preseason reputation"};
+function renderChange(prev,st,what){
+if(!prev){return}
+const moves=st.L.map((t,i)=>{const was=prev.L.indexOf(t);
+const dp={h:st.S[t].ph-prev.S[t].ph,o:st.S[t].po-prev.S[t].po,d:st.S[t].pd-prev.S[t].pd,p:st.S[t].pp-prev.S[t].pp};
+const drv=Object.keys(dp).sort((a,b)=>Math.abs(dp[b])-Math.abs(dp[a]))[0];
+return{t,now:i+1,was:was+1,delta:was-i,ds:st.S[t].s-prev.S[t].s,drv,dpv:dp[drv]}});
+const up=moves.filter(m=>m.delta>0).sort((a,b)=>b.delta-a.delta).slice(0,4);
+const dn=moves.filter(m=>m.delta<0).sort((a,b)=>a.delta-b.delta).slice(0,4);
+const z=t=>T.find(x=>x.t===t);
+const reason=m=>{const r=z(m.t),zz={h:r.zh,o:r.zo,d:-r.zd,p:r.zp}[m.drv];
+const lvl=zz>0.8?"Strong":zz>0.2?"Above-average":zz>-0.2?"Average":zz>-0.8?"Below-average":"Weak";
+const wUp=st.f[m.drv]>prev.f[m.drv];
+if(Math.abs(st.f[m.drv]-prev.f[m.drv])<1e-9&&st.f[m.drv]>0){const pk={h:"ph",o:"po",d:"pd",p:"pp"}[m.drv],zPrev=prev.S[m.t][pk]/(15*prev.f[m.drv]),zNow=st.S[m.t][pk]/(15*st.f[m.drv]);
+return`Its ${LABEL[m.drv]} moved from z ${sg(zPrev)} to z ${sg(zNow)} with recent games weighted differently. Net ${sg(m.ds)} pts.`}
+const total=sg(m.ds);
+if(m.delta<0&&m.ds>=0)return`${lvl} ${LABEL[m.drv]} (z ${sg(zz)}) gained it ${total} pts, but teams around it gained more.`;
+if(m.delta>0&&m.ds<0)return`${lvl} ${LABEL[m.drv]} (z ${sg(zz)}) cost it ${total} pts, but teams around it lost more.`;
+const eff=zz>=0?(wUp?"is worth more":"is worth less"):(wUp?"costs more":"costs less");
+return`${lvl} ${LABEL[m.drv]} (z ${sg(zz)}) ${eff} now that its weight went ${wUp?"up":"down"}. Net ${total} pts.`};
+const row=(m,c)=>`<div class="mv-row"><div><div>${m.t} <span class="${c}">${m.was} → ${m.now}</span></div><div class="why">${reason(m)}</div></div><span class="${c}">${m.delta>0?"▲"+m.delta:"▼"+(-m.delta)}</span></div>`;
+$("chg-title").textContent="What the last move did";
+if(!up.length&&!dn.length){$("chg").innerHTML=`<div class="why" style="margin-bottom:6px">${what}</div><div class="empty">Scores shifted but the order held.</div>`;return}
+$("chg").innerHTML=`<div class="why" style="margin-bottom:8px">${what}</div>`+
+(up.length?`<div style="font-size:12px;font-weight:600;margin:4px 0" class="up">Rising</div>`+up.map(m=>row(m,"up")).join(""):"")+
+(dn.length?`<div style="font-size:12px;font-weight:600;margin:10px 0 4px" class="dn">Falling</div>`+dn.map(m=>row(m,"dn")).join(""):"");}
+
+function describe(prevW,curW){
+const n=["H2H","Offense","Defense","Preseason"],parts=[];
+for(let i=0;i<4;i++){if(prevW[i]!==curW[i])parts.push(`${n[i]} ${prevW[i]} → ${curW[i]}`)}
+if(prevW[4]!==curW[4])parts.push("Tiebreak "+(curW[4]?"on":"off"));
+if(prevW[5]!==curW[5])parts.push(`Recency ${prevW[5]} → ${curW[5]} (week 1 games now count ${Math.round(100-0.8*curW[5])}%)`);
+const pt=prevW[0]+prevW[1]+prevW[2]+prevW[3]||1,ct=curW[0]+curW[1]+curW[2]+curW[3]||1;
+const sh=["H2H","Off","Def","Pre"].map((k,i)=>[k,Math.round(prevW[i]/pt*100),Math.round(curW[i]/ct*100)]).filter(x=>x[1]||x[2]).map(([k,a,b])=>`${k} ${a}% → ${b}%`).join(", ");
+return parts.join(", ")+". Effective share: "+sh+"."}
+
+let baseW=read(),baseState=compute(...baseW);
+let CUR=null,SUB="ins";
+function liveAgree(st){if(typeof ST==="undefined")return;
+const ours=T.map(r=>st.L.indexOf(r.t)+1),apR=T.map(r=>r.ap);
+const rS=ST.spearman(ours,apR),k=ST.kendall(ours,apR),rP=ST.pearson(T.map(r=>st.S[r.t].s),T.map(r=>pollPts(NOW,r.t)));
+document.getElementById("live").innerHTML=`<div><b>${rP.toFixed(2)}</b><span>Pearson r</span></div><div><b>${rS.toFixed(2)}</b><span>Spearman ρ</span></div><div><b>${k.tau.toFixed(2)}</b><span>Kendall τ-b</span></div>`}
+function update(commit){
+const w=read();if(w[5]!==REC){REC=w[5];recalcT();if(typeof SENS_H2H!=="undefined")SENS_H2H=null}
+const st=compute(...w);CUR=st;
+renderControls(st);renderList(st);liveAgree(st);if(typeof renderAnalysis!=="undefined")renderAnalysis(st);if(typeof explainer!=="undefined"&&!$("p-stats").hidden)explainer();
+if(JSON.stringify(w)!==JSON.stringify(baseW))renderChange(baseState,st,describe(baseW,w));
+if(commit){baseW=w;baseState=st}}
+["wh","wo","wd","wp","rec"].forEach(id=>{$(id).addEventListener("input",()=>update(false));$(id).addEventListener("change",()=>update(true))});
+$("h2h").addEventListener("change",()=>update(true));
+function setW(h,o,d,p,rec){$("wh").value=h;$("wo").value=o;$("wd").value=d;$("wp").value=p;if(rec!=null)$("rec").value=rec;update(true)}
+$("reset").addEventListener("click",()=>{$("h2h").checked=true;setW(60,20,20,0,0);$("matchnote").textContent=""});
+update(true);
+
+let sortK="ap",sortDir=1,open=new Set();
+function renderStats(){
+const rows=[...T].sort((a,b)=>{const x=sortK==="rec"?b.W-b.L-(a.W-a.L):sortK==="t"?a.t.localeCompare(b.t):a[sortK]-b[sortK];return x*sortDir});
+const site={H:"vs",A:"at",N:"vs (N)"};
+$("st").querySelector("tbody").innerHTML=rows.map(r=>{
+const main=`<tr class="team" data-t="${r.t}"><td>${open.has(r.t)?"▾":"▸"} ${r.t}</td><td>${r.rec}</td><td>${apS(r)}</td><td>${r.sos.toFixed(2)}</td><td>${r.h.toFixed(2)}</td><td>${sg(r.zh)}</td><td>${r.o.toFixed(1)}</td><td>${sg(r.zo)}</td><td>${r.d.toFixed(1)}</td><td>${sg(r.zd)}</td><td>${r.ppg.toFixed(1)}</td><td>${r.papg.toFixed(1)}</td></tr>`;
+if(!open.has(r.t))return main;
+const gl=`<tr class="games"><td colspan="12"><table class="gl"><thead><tr><th>Opponent</th><th>Conf</th><th>Result</th><th>q</th><th>H2H value</th><th>Off adj</th><th>Def adj</th></tr></thead><tbody>${r.games.map(g=>`<tr><td>${site[g.s]} ${g.o}</td><td>${g.c}</td><td class="${g.w?"up":"dn"}">${g.w?"W":"L"} ${g.pf}-${g.pa}</td><td>${g.q.toFixed(2)}</td><td>${g.v.toFixed(2)}</td><td>${g.oa.toFixed(1)}</td><td>${g.da.toFixed(1)}</td></tr>`).join("")}</tbody></table></td></tr>`;
+return main+gl}).join("")}
+$("st").querySelector("thead").addEventListener("click",e=>{const k=e.target.dataset.k;if(!k)return;
+if(sortK===k)sortDir*=-1;else{sortK=k;sortDir=["t","ap","d","zd","papg"].includes(k)?1:-1}renderStats()});
+$("st").querySelector("tbody").addEventListener("click",e=>{const tr=e.target.closest("tr.team");if(!tr)return;const t=tr.dataset.t;open.has(t)?open.delete(t):open.add(t);renderStats()});
+renderStats();
+
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
+document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected",x===b));
+["rank","stats","conf","ana"].forEach(k=>$("p-"+k).hidden=b.dataset.tab!==k);
+if(b.dataset.tab==="conf")confRender();
+if(b.dataset.tab==="ana")renderAnalysis(CUR);if(b.dataset.tab==="stats")explainer()}));
+</script>
+<script>
+const ST=(()=>{
+const mean=a=>a.reduce((s,x)=>s+x,0)/a.length;
+function rank(a,desc){const idx=a.map((v,i)=>[v,i]).sort((p,q)=>desc?q[0]-p[0]:p[0]-q[0]);const r=new Array(a.length);
+for(let i=0;i<idx.length;){let j=i;while(j+1<idx.length&&idx[j+1][0]===idx[i][0])j++;const avg=(i+j)/2+1;for(let k=i;k<=j;k++)r[idx[k][1]]=avg;i=j+1}return r}
+function pearson(x,y){const mx=mean(x),my=mean(y);let sxy=0,sx=0,sy=0;for(let i=0;i<x.length;i++){const a=x[i]-mx,b=y[i]-my;sxy+=a*b;sx+=a*a;sy+=b*b}return sxy/Math.sqrt(sx*sy)}
+function spearman(x,y){return pearson(rank(x),rank(y))}
+function kendall(x,y){let c=0,d=0,tx=0,ty=0;const n=x.length;for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const a=Math.sign(x[i]-x[j]),b=Math.sign(y[i]-y[j]);if(a===0&&b===0)continue;if(a===0)tx++;else if(b===0)ty++;else if(a===b)c++;else d++}
+const tau=(c-d)/Math.sqrt((c+d+tx)*(c+d+ty));const z=3*tau*Math.sqrt(n*(n-1))/Math.sqrt(2*(2*n+5));return{tau,p:2*(1-ncdf(Math.abs(z)))}}
+function ncdf(z){const t=1/(1+0.2316419*Math.abs(z)),d=0.3989423*Math.exp(-z*z/2);const p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p}
+function lgamma(x){const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];let y=x,t=x+5.5;t-=(x+0.5)*Math.log(t);let s=1.000000000190015;for(const k of c)s+=k/++y;return -t+Math.log(2.5066282746310005*s/x)}
+function betacf(a,b,x){let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;if(Math.abs(d)<1e-30)d=1e-30;d=1/d;let h=d;for(let m=1;m<=200;m++){const m2=2*m;let aa=m*(b-m)*x/((qam+m2)*(a+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;h*=d*c;aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<3e-12)break}return h}
+function ibeta(a,b,x){if(x<=0)return 0;if(x>=1)return 1;const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x));return x<(a+1)/(a+b+2)?bt*betacf(a,b,x)/a:1-bt*betacf(b,a,1-x)/b}
+function pr(r,n){if(Math.abs(r)>=1)return 0;const df=n-2,t=r*Math.sqrt(df/(1-r*r));return ibeta(df/2,0.5,df/(df+t*t))}
+function fisher(a,b,c,d){const lf=n=>lgamma(n+1);const n=a+b+c+d,r1=a+b,c1=a+c;const P=x=>Math.exp(lf(r1)+lf(n-r1)+lf(c1)+lf(n-c1)-lf(n)-lf(x)-lf(r1-x)-lf(c1-x)-lf(n-r1-c1+x));const p0=P(a);let p=0;for(let x=Math.max(0,r1+c1-n);x<=Math.min(r1,c1);x++){const px=P(x);if(px<=p0*(1+1e-7))p+=px}return Math.min(1,p)}
+function ols(x,y){const mx=mean(x),my=mean(y);let sxy=0,sxx=0;for(let i=0;i<x.length;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)**2}const b=sxy/sxx,a=my-b*mx;const r=pearson(x,y);return{a,b,r2:r*r}}
+function partial(rxy,rxz,ryz){return(rxy-rxz*ryz)/Math.sqrt((1-rxz*rxz)*(1-ryz*ryz))}
+return{mean,rank,pearson,spearman,kendall,pr,fisher,ols,partial}})();
+
+const NR=26;
+const WEEKS=Object.keys(POLLS).sort();
+const WK_LABEL=d=>{const[y,m,dd]=d.split("-");return["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m]+" "+(+dd)};
+const pollRank=(wk,t)=>{const e=POLLS[wk].find(x=>x[0]===t);return e?e[1]:NR};
+const pollPts=(wk,t)=>{const e=POLLS[wk].find(x=>x[0]===t);if(e&&e[2]!=null)return e[2];const o=(typeof ORV!=="undefined"&&ORV[wk])?ORV[wk].find(x=>x[0]===t):null;return o?o[1]:0};
+const PRE=WEEKS[0],NOW=WEEKS[WEEKS.length-1];
+const fmtP=p=>p<0.001?"p < .001":"p = "+p.toFixed(3).replace(/^0/,"");
+const strength=r=>{const a=Math.abs(r);return a>=0.8?"Very strong":a>=0.6?"Strong":a>=0.4?"Moderate":a>=0.2?"Weak":"Negligible"};
+const sig=p=>p<0.05?"significant at 5%":"not significant at 5%";
+
+function sensitivity(h2h){
+const pos={};T.forEach(r=>pos[r.t]=[]);
+for(let a=0;a<=100;a+=10)for(let b=0;b<=100;b+=10)for(let c=0;c<=100;c+=10){if(a+b+c===0)continue;const s=compute(a,b,c,+document.getElementById("wp").value,h2h);s.L.forEach((t,i)=>pos[t].push(i+1))}
+return T.map(r=>{const p=pos[r.t].sort((x,y)=>x-y);return{t:r.t,ap:r.ap,min:p[0],max:p[p.length-1],med:p[Math.floor(p.length/2)],q1:p[Math.floor(p.length*0.25)],q3:p[Math.floor(p.length*0.75)]}})}
+
+let TSX=null,TSX_AR=null,SENS=null,SENS_H2H=null,MAT="pearson",HL=null;
+
+function renderAnalysis(st){
+if(!document.getElementById("p-ana")||document.getElementById("p-ana").hidden)return;
+const ours=T.map(r=>st.L.indexOf(r.t)+1),score=T.map(r=>st.S[r.t].s);
+const apR=T.map(r=>r.ap),apP=T.map(r=>pollPts(NOW,r.t)),pre=T.map(r=>pollRank(PRE,r.t));
+const n=T.length;
+const rP=ST.pearson(score,apP),rS=ST.spearman(ours,apR),k=ST.kendall(ours,apR);
+const card=(lbl,val,sub)=>`<div class="metric"><div class="ml">${lbl}</div><div class="mv">${val}</div><div class="ms">${sub}</div></div>`;
+document.getElementById("agree").innerHTML=
+card("Pearson r",rP.toFixed(2),`Score vs AP points. ${strength(rP)}, ${fmtP(ST.pr(rP,n))}`)+
+card("Spearman ρ",rS.toFixed(2),`Our rank vs AP rank. ${strength(rS)}, ${fmtP(ST.pr(rS,n))}`)+
+card("Kendall τ-b",k.tau.toFixed(2),`Pairs ordered the same way: ${Math.round((k.tau+1)/2*100)}%. ${fmtP(k.p)}`);
+
+const pos=T.map((r,i)=>i).filter(i=>apP[i]>0),fit=ST.ols(pos.map(i=>apP[i]),pos.map(i=>score[i]));
+scatter(apP,score,fit,st);
+
+const rAPpre=ST.spearman(apR,pre),rOURpre=ST.spearman(ours,pre),rAPour=ST.spearman(apR,ours);
+const part=ST.partial(rAPpre,rAPour,rOURpre);
+document.getElementById("anchor").innerHTML=
+card("AP now vs preseason",rAPpre.toFixed(2),"Spearman ρ")+
+card("Our rank vs preseason",rOURpre.toFixed(2),"Spearman ρ")+
+card("Preseason pull on AP",part.toFixed(2),"Partial ρ, holding our résumé rank fixed");
+document.getElementById("anchor-read").textContent=part>0.25?
+`After accounting for résumé, the current AP poll still tracks the preseason poll (partial ρ ${part.toFixed(2)}). Teams that started high are being held high beyond what their results explain.`:
+part<-0.2?`After accounting for résumé, the AP poll leans away from the preseason order (partial ρ ${part.toFixed(2)}).`:
+part>0.1?`After accounting for résumé, preseason position still has a modest pull on the AP order (partial ρ ${part.toFixed(2)}).`:`After accounting for résumé, preseason position adds little to the current AP order (partial ρ ${part.toFixed(2)}).`;
+
+matrix(st);
+contingency(st);
+IMP.render(st);
+CON.render();
+topline(st);
+const h2h=document.getElementById("h2h").checked,key=h2h+"|"+document.getElementById("wp").value;
+if(SENS_H2H!==key){SENS=sensitivity(h2h);SENS_H2H=key}
+sensChart(st);
+}
+
+function scatter(x,y,fit,st){
+const W=560,H=300,P={l:44,r:12,t:12,b:34};
+const xmin=0,xmax=1800,ymin=Math.min(...y)-3,ymax=Math.max(...y)+3;
+const sx=v=>P.l+(v-xmin)/(xmax-xmin)*(W-P.l-P.r),sy=v=>H-P.b-(v-ymin)/(ymax-ymin)*(H-P.t-P.b);
+let g="";
+for(let v=0;v<=1800;v+=300)g+=`<line x1="${sx(v)}" x2="${sx(v)}" y1="${P.t}" y2="${H-P.b}" class="gridl"/><text x="${sx(v)}" y="${H-P.b+16}" class="axl" text-anchor="middle">${v}</text>`;
+const ys=Math.ceil(ymin/10)*10;for(let v=ys;v<=ymax;v+=10)g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${sy(v)}" y2="${sy(v)}" class="gridl"/><text x="${P.l-6}" y="${sy(v)+4}" class="axl" text-anchor="end">${v}</text>`;
+g+=`<line x1="${sx(xmin)}" y1="${sy(fit.a+fit.b*xmin)}" x2="${sx(xmax)}" y2="${sy(fit.a+fit.b*xmax)}" stroke="var(--acc)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+T.forEach((r,i)=>{const res=y[i]-(fit.a+fit.b*x[i]);
+if(x[i]<=0){g+=`<circle cx="${sx(x[i])}" cy="${sy(y[i])}" r="4" fill="none" stroke="var(--faint)" stroke-width="1.5"><title>${r.t}: no AP votes, score ${y[i].toFixed(1)}</title></circle>`;return}
+const c=res>4?"var(--up)":res<-4?"var(--dn)":"var(--faint)";
+g+=`<circle cx="${sx(x[i])}" cy="${sy(y[i])}" r="4.5" fill="${c}"><title>${r.t}: AP ${x[i]} pts, score ${y[i].toFixed(1)}, residual ${res>=0?"+":""}${res.toFixed(1)}</title></circle>`;
+if(Math.abs(res)>6||i<1){const right=sx(x[i])>W-90;g+=`<text x="${sx(x[i])+(right?-8:7)}" y="${sy(y[i])+4}" class="axl" text-anchor="${right?"end":"start"}" style="fill:var(--ink)">${r.t}</text>`}});
+g+=`<text x="${(W+P.l)/2}" y="${H-4}" class="axl" text-anchor="middle">AP poll points</text>`;
+document.getElementById("scatter").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Scatter of AP points against résumé score">${g}</svg>`;
+document.getElementById("fit").textContent=`Fit: score = ${fit.a.toFixed(1)} + ${(fit.b*100).toFixed(2)} per 100 AP points, R² = ${fit.r2.toFixed(2)}. Green dots are underrated by the AP relative to their résumé (residual above +4); red dots are overrated (below −4). Hollow circles are teams with no AP votes this week; they're left out of the fit because 0 points can't show how far below the poll a team sits. Tap or hover a dot for its numbers.`}
+
+function matrix(st){
+const vars=[["H2H",T.map(r=>r.h)],["Offense",T.map(r=>r.o)],["Defense",T.map(r=>-r.d)],["Opp str",T.map(r=>r.sos)],["Win %",T.map(r=>r.W/(r.W+r.L))],["AP pts",T.map(r=>pollPts(NOW,r.t))],["Preseason",T.map(r=>-pollRank(PRE,r.t))],["Our score",T.map(r=>st.S[r.t].s)]];
+const f=MAT==="pearson"?ST.pearson:ST.spearman;
+let h=`<table class="mat"><thead><tr><th></th>${vars.map(v=>`<th>${v[0]}</th>`).join("")}</tr></thead><tbody>`;
+vars.forEach((a,i)=>{h+=`<tr><th>${a[0]}</th>`;vars.forEach((b,j)=>{const r=i===j?1:f(a[1],b[1]);const p=ST.pr(r,T.length);
+const bg=r>=0?`rgba(24,95,165,${Math.abs(r)*0.75})`:`rgba(163,45,45,${Math.abs(r)*0.75})`;const fg=Math.abs(r)>0.55?"#fff":"var(--ink)";
+h+=`<td style="background:${bg};color:${fg}" title="${a[0]} vs ${b[0]}: ${r.toFixed(3)}, ${fmtP(p)}">${i===j?"1":r.toFixed(2).replace("-","−")}${i!==j&&p<0.05?"*":""}</td>`});h+="</tr>"});
+document.getElementById("matrix").innerHTML=h+"</tbody></table>"}
+
+function contingency(st){
+const top=12,pw=t=>pollRank(PRE,t)<NR;
+const tab=order=>{let a=0,b=0,c=0,d=0;order.forEach((t,i)=>{const P=pw(t),Top=i<top;if(P&&Top)a++;else if(P)b++;else if(Top)c++;else d++});return[a,b,c,d]};
+const apOrder=[...T].sort((x,y)=>x.ap-y.ap).map(r=>r.t);
+const rows=[["AP poll",tab(apOrder)],["Résumé model",tab(st.L)]];
+document.getElementById("cont").innerHTML=`<table class="gl"><thead><tr><th>Ranking</th><th>Preseason ranked, top 12</th><th>Preseason ranked, 13+</th><th>Unranked, top 12</th><th>Unranked, 13+</th><th>Fisher p</th></tr></thead><tbody>${rows.map(([n,[a,b,c,d]])=>`<tr><td>${n}</td><td>${a}</td><td>${b}</td><td>${c}</td><td>${d}</td><td>${ST.fisher(a,b,c,d).toFixed(3)}</td></tr>`).join("")}</tbody></table>`}
+
+function sensChart(st){
+const rows=[...SENS].sort((a,b)=>a.med-b.med||a.min-b.min);
+const W=560,rowH=20,P={l:120,r:16,t:22},H=P.t+rows.length*rowH+8;
+const NP=T.length,sx=v=>P.l+(v-1)/(NP-1)*(W-P.l-P.r);
+let g="";for(let v=1;v<=NP;v+=(NP>30?6:4))g+=`<line x1="${sx(v)}" x2="${sx(v)}" y1="${P.t-6}" y2="${H-6}" class="gridl"/><text x="${sx(v)}" y="${P.t-10}" class="axl" text-anchor="middle">${v}</text>`;
+rows.forEach((r,i)=>{const y=P.t+i*rowH+rowH/2,cur=st.L.indexOf(r.t)+1;
+g+=`<text x="${P.l-8}" y="${y+4}" class="axl" text-anchor="end" style="fill:var(--ink)">${r.t}</text>`;
+g+=`<line x1="${sx(r.min)}" x2="${sx(r.max)}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="2"/>`;
+g+=`<rect x="${sx(r.q1)}" y="${y-5}" width="${Math.max(2,sx(r.q3)-sx(r.q1))}" height="10" rx="2" fill="var(--acc-bg)" stroke="var(--acc)" stroke-width="0.8"><title>${r.t}: best ${r.min}, middle half ${r.q1}–${r.q3}, worst ${r.max}</title></rect>`;
+g+=`<circle cx="${sx(cur)}" cy="${y}" r="3.5" fill="var(--ink)"><title>Current weights: ${cur}</title></circle>`;
+if(r.ap<=25)g+=`<rect x="${sx(r.ap)-1}" y="${y-7}" width="2" height="14" fill="var(--dn)"><title>AP rank: ${r.ap}</title></rect>`});
+document.getElementById("sens").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rank range across weight settings">${g}</svg>`}
+
+function bump(){
+const teams=T.map(r=>r.t),W=640,P={l:34,r:120,t:14,b:28},H=400;
+const sx=i=>P.l+i/(WEEKS.length-1)*(W-P.l-P.r),sy=r=>P.t+(r-1)/(NR-1)*(H-P.t-P.b);
+let g="";
+WEEKS.forEach((w,i)=>g+=`<line x1="${sx(i)}" x2="${sx(i)}" y1="${P.t}" y2="${H-P.b}" class="gridl"/><text x="${sx(i)}" y="${H-8}" class="axl" text-anchor="middle">${i===0?"Pre":WK_LABEL(w)}</text>`);
+[1,5,10,15,20,25].forEach(r=>g+=`<text x="${P.l-8}" y="${sy(r)+4}" class="axl" text-anchor="end">${r}</text>`);
+g+=`<text x="${P.l-8}" y="${sy(NR)+4}" class="axl" text-anchor="end">NR</text><line x1="${P.l}" x2="${W-P.r}" y1="${sy(NR)}" y2="${sy(NR)}" class="gridl" stroke-dasharray="3 3"/>`;
+const sel=HL;
+const order=teams.slice().sort((a,b)=>(a===sel)-(b===sel));
+order.forEach(t=>{const pts=WEEKS.map((w,i)=>[sx(i),sy(pollRank(w,t))]);const on=t===sel;
+const col=on?"var(--acc)":"var(--faint)";
+g+=`<polyline points="${pts.map(p=>p.join(",")).join(" ")}" fill="none" stroke="${col}" stroke-width="${on?2.5:1}" opacity="${sel&&!on?0.35:0.9}" style="cursor:pointer" data-t="${t}"><title>${t}</title></polyline>`;
+if(on)pts.forEach((p,i)=>{const r=pollRank(WEEKS[i],t);g+=`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--acc)"/><text x="${p[0]}" y="${p[1]-8}" class="axl" text-anchor="middle" style="fill:var(--acc)">${r===NR?"NR":r}</text>`});
+});
+const labs=teams.filter(t=>pollRank(NOW,t)<=25||t===sel).map(t=>({t,y:sy(pollRank(NOW,t))})).sort((p,q)=>p.y-q.y);
+for(let i=1;i<labs.length;i++)if(labs[i].y-labs[i-1].y<12)labs[i].y=labs[i-1].y+12;
+labs.forEach(l=>{const on=l.t===sel;g+=`<text x="${sx(WEEKS.length-1)+8}" y="${l.y+4}" class="axl" style="fill:${on?"var(--acc)":"var(--mute)"};cursor:pointer" data-t="${l.t}">${l.t}</text>`});
+document.getElementById("bump").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="AP rank by week for every tracked team">${g}</svg>`;
+document.querySelectorAll("#bump [data-t]").forEach(el=>el.addEventListener("click",()=>{HL=HL===el.dataset.t?null:el.dataset.t;document.getElementById("hl").value=HL||"";bump()}))}
+
+function timeSeries(){
+const all=[...new Set(WEEKS.flatMap(w=>POLLS[w].map(e=>e[0])))];
+const persist=[];
+for(let i=1;i<WEEKS.length;i++){const a=all.map(t=>pollRank(WEEKS[i-1],t)),b=all.map(t=>pollRank(WEEKS[i],t));
+const moved=all.filter(t=>pollRank(WEEKS[i-1],t)<NR||pollRank(WEEKS[i],t)<NR);
+const mad=ST.mean(moved.map(t=>Math.abs(pollRank(WEEKS[i],t)-pollRank(WEEKS[i-1],t))));
+const churn=POLLS[WEEKS[i]].filter(e=>pollRank(WEEKS[i-1],e[0])===NR).length;
+persist.push({w:WEEKS[i],rho:ST.spearman(a,b),mad,churn})}
+const x=[],y=[];
+for(let i=1;i<WEEKS.length;i++)POLLS[WEEKS[i]].forEach(e=>{const prev=POLLS[WEEKS[i-1]].find(p=>p[0]===e[0]);if(prev&&prev[2]!=null&&e[2]!=null){x.push(prev[2]);y.push(e[2])}});
+const ar=x.length>5?ST.ols(x,y):null;TSX_AR=ar;
+TSX={persist,x,y};
+const preCorr=WEEKS.map(w=>ST.spearman(all.map(t=>pollRank(PRE,t)),all.map(t=>pollRank(w,t))));
+document.getElementById("ts-table").innerHTML=`<table class="gl"><thead><tr><th>Poll</th><th>ρ vs prior week</th><th>Avg rank move</th><th>New entries</th><th>ρ vs preseason</th></tr></thead><tbody>${persist.map((p,i)=>`<tr><td>${WK_LABEL(p.w)}</td><td>${p.rho.toFixed(2)}</td><td>${p.mad.toFixed(1)}</td><td>${p.churn}</td><td>${preCorr[i+1].toFixed(2)}</td></tr>`).join("")}</tbody></table>`;
+document.getElementById("ar").innerHTML=ar?
+`<div class="metric"><div class="ml">AR(1) slope on AP points</div><div class="mv">${ar.b.toFixed(2)}</div><div class="ms">points this week = ${ar.a.toFixed(0)} + ${ar.b.toFixed(2)} × last week. R² ${ar.r2.toFixed(2)}, n = ${x.length} team-weeks</div></div>
+<div class="metric"><div class="ml">Average week-to-week ρ</div><div class="mv">${ST.mean(persist.map(p=>p.rho)).toFixed(2)}</div><div class="ms">How much each poll looks like the one before it</div></div>
+<div class="metric"><div class="ml">Preseason ρ, latest poll</div><div class="mv">${preCorr[preCorr.length-1].toFixed(2)}</div><div class="ms">Decay from 1.00 at preseason across ${WEEKS.length-1} weeks</div></div>`:
+`<div class="ms">Not enough weeks with points to fit.</div>`;
+const sel=document.getElementById("hl");sel.innerHTML=`<option value="">Highlight a team</option>`+T.map(r=>`<option>${r.t}</option>`).join("");
+sel.addEventListener("change",()=>{HL=sel.value||null;bump()});
+bump()}
+
+const FULLN={H2H:"H2H résumé",Off:"offense",Def:"defense",Pre:"preseason reputation"};
+const joinAnd=a=>a.length<2?a.join(""):a.slice(0,-1).join(", ")+" and "+a[a.length-1];
+
+const IMP=(()=>{
+const K=["h","o","d","p"],NM={h:"H2H",o:"Off",d:"Def",p:"Pre"},COL={h:"var(--h)",o:"var(--o)",d:"var(--d)",p:"var(--p)"};
+const RECS=[0,25,50,75,100];
+function feats(cut,rec){const ref=cut.slice(0,10);
+const rows=T.map(r=>{const g=r.games.filter(x=>x.dt&&x.dt<cut);if(!g.length)return null;const gw=g.map(x=>recW(x.dt,ref,rec));
+return{t:r.t,h:wavg(g.map(x=>x.v),gw),o:wavg(g.map(x=>x.oa),gw),d:wavg(g.map(x=>x.da),gw),pre:r.pre,n:g.length}}).filter(Boolean);
+["h","o","d","pre"].forEach(k=>{const v=rows.map(r=>r[k]),m=ST.mean(v),s=Math.sqrt(ST.mean(v.map(x=>(x-m)**2)))||1;rows.forEach(r=>r["z"+k]=(r[k]-m)/s)});
+rows.forEach(r=>{r.zp=r.zpre;r.zd=-r.zd});return rows}
+const G5S=[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0],GAPS=[0,0.1,0.2];
+const confMult=(c,g5,gap)=>c==="FCS"?null:(c==="SEC"||c==="B1G"||c==="IND")?1:(c==="B12"||c==="ACC")?1-gap:g5;
+function featsC(cut,rec,g5,gap){const ref=cut.slice(0,10);
+const rows=T.map(r=>{const g=r.raw.filter(x=>x.dt&&x.dt<cut);if(!g.length)return null;
+const vals=g.map(x=>{const mlt=confMult(x.c,g5,gap),q=mlt==null?FCS_Q:x.qr*mlt,w=x.pf>x.pa,mg=Math.abs(x.pf-x.pa);let v=w?1+q:q-0.5;if(w)v+=x.s==="A"?0.1:x.s==="N"?0.05:0;else{if(x.s==="H")v-=0.1;if(mg<=7)v+=0.1}
+return[v,Math.min(x.pf,56)*(0.6+0.8*q),x.pa*(1.4-0.8*q),recW(x.dt,ref,rec)]});const gw=vals.map(v=>v[3]);
+return{t:r.t,h:wavg(vals.map(v=>v[0]),gw),o:wavg(vals.map(v=>v[1]),gw),d:wavg(vals.map(v=>v[2]),gw),pre:r.pre,n:g.length}}).filter(Boolean);
+["h","o","d","pre"].forEach(k=>{const v=rows.map(r=>r[k]),mm=ST.mean(v),s=Math.sqrt(ST.mean(v.map(x=>(x-mm)**2)))||1;rows.forEach(r=>r["z"+k]=(r[k]-mm)/s)});
+rows.forEach(r=>{r.zp=r.zpre;r.zd=-r.zd});return rows}
+const GRID=[];for(let a=0;a<=20;a++)for(let b=0;a+b<=20;b++)for(let c=0;a+b+c<=20;c++){const d=20-a-b-c;GRID.push([a*5,b*5,c*5,d*5])}
+function fit(rows,target,allowPre){
+let best=null;
+for(const w of GRID){if(!allowPre&&w[3])continue;if(!w[0]&&!w[1]&&!w[2]&&!w[3])continue;
+const s=rows.map(r=>w[0]*r.zh+w[1]*r.zo+w[2]*r.zd+w[3]*r.zp);const r=ST.pearson(s,target);
+if(!best||r>best.r)best={w,r}}return best}
+function score(rows,target,w){return ST.pearson(rows.map(r=>w[0]*r.zh+w[1]*r.zo+w[2]*r.zd+w[3]*r.zp),target)}
+let WEEKLY=null;
+function reset(){WEEKLY=null}
+function run(){
+if(WEEKLY)return WEEKLY;
+WEEKLY=WEEKS.slice(1).map(wk=>{
+let best=null,bestRes=null,byRec={},byG5={};
+for(const rec of RECS)for(const g5 of G5S)for(const gap of GAPS){const rows=featsC(wk+"T23:59",rec,g5,gap).filter(r=>pollPts(wk,r.t)>0),y=rows.map(r=>pollPts(wk,r.t));
+const f=fit(rows,y,true),g=fit(rows,y,false);
+if(gap===0&&g5===1)byRec[rec]={rows,y,r:f.r};
+if(!byG5[g5]||f.r>byG5[g5])byG5[g5]=f.r;
+if(!best||f.r>best.r+1e-9)best={...f,rec,g5,gap,rows,y};if(!bestRes||g.r>bestRes.r+1e-9)bestRes={...g,rec,g5,gap}}
+return{wk,n:best.rows.length,rows:best.rows,y:best.y,full:best,res:bestRes,byRec,byG5,gain:best.r*best.r-bestRes.r*bestRes.r,confGain:best.r**2-byG5[1]**2}});
+return WEEKLY}
+const sd=a=>{const m=ST.mean(a);return Math.sqrt(ST.mean(a.map(x=>(x-m)**2)))};
+function render(st){
+const W=run(),now=W[W.length-1],cur=[+$("wh").value,+$("wo").value,+$("wd").value,+$("wp").value];
+const curSum=cur.reduce((a,b)=>a+b,0)||1,curPct=cur.map(x=>Math.round(x/curSum*100));
+const ur=feats(now.wk+"T23:59",REC).filter(r=>pollPts(now.wk,r.t)>0),rCur=score(ur,ur.map(r=>pollPts(now.wk,r.t)),cur);
+const recLine=f=>f.rec?`Recency ${f.rec}: week 1 games count ${Math.round(100-0.8*f.rec)}%`:"Recency 0: every game counts the same";
+const confLine=f=>f.g5==null?"":`. Group of 5 opponents × ${f.g5.toFixed(1)}${f.gap?`, Big 12 and ACC × ${(1-f.gap).toFixed(1)}`:""}`;
+const bar=w=>`<div class="mix" style="height:14px">${K.map((k,i)=>`<span style="width:${w[i]}%;background:${COL[k]}" title="${NM[k]} ${w[i]}%"></span>`).join("")}</div><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">${K.map((k,i)=>w[i]?`<span style="color:${COL[k]}">${NM[k]} ${w[i]}%</span>`:"").join("")}</div>`;
+$("imp-now").innerHTML=`<div class="metric"><div class="ml">AP's implied weights, ${WK_LABEL(now.wk)}</div>${bar(now.full.w)}<div class="ms" style="margin-top:6px">${recLine(now.full)}${confLine(now.full)}. Fit r ${now.full.r.toFixed(2)} (R² ${(now.full.r**2).toFixed(2)}) across ${now.n} ranked teams</div></div>
+<div class="metric"><div class="ml">Your weights</div>${bar(curPct)}<div class="ms" style="margin-top:6px">${recLine({rec:REC})}. Fit r ${rCur.toFixed(2)} (R² ${(rCur**2).toFixed(2)}) against the same AP points</div></div>
+<div class="metric"><div class="ml">Best fit using results only</div>${bar(now.res.w)}<div class="ms" style="margin-top:6px">Fit r ${now.res.r.toFixed(2)}. Adding preseason raises R² by ${(now.gain*100).toFixed(0)} points</div></div>`;
+$("imp-table").innerHTML=`<table class="gl"><thead><tr><th>Poll</th><th>Teams</th><th style="color:var(--h)">H2H</th><th style="color:var(--o)">Off</th><th style="color:var(--d)">Def</th><th style="color:var(--p)">Pre</th><th>Recency</th><th>G5 ×</th><th>B12/ACC ×</th><th>Fit r</th><th>R² gain from Pre</th></tr></thead><tbody>${W.map(w=>`<tr><td>${WK_LABEL(w.wk)}</td><td>${w.n}</td>${w.full.w.map(x=>`<td>${x}%</td>`).join("")}<td>${w.full.rec}</td><td>${w.full.g5.toFixed(1)}</td><td>${(1-w.full.gap).toFixed(1)}</td><td>${w.full.r.toFixed(2)}</td><td>${(w.gain*100).toFixed(0)}</td></tr>`).join("")}</tbody></table>`;
+chart(W);
+const late=W.slice(-4),early=W.slice(0,4);
+const preE=ST.mean(early.map(w=>w.full.w[3])),preL=ST.mean(late.map(w=>w.full.w[3]));
+const resE=100-preE,resL=100-preL;
+const vol=K.map((k,i)=>[k,sd(W.slice(2).map(w=>w.full.w[i]))]);
+const comp=K.map((k,i)=>[NM[k],ST.mean(late.map(w=>w.full.w[i]))]).sort((a,b)=>b[1]-a[1]);
+const diff=K.map((k,i)=>[NM[k],curPct[i]-now.full.w[i]]).filter(x=>Math.abs(x[1])>=10).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+const recE=ST.mean(early.map(w=>w.full.rec)),recL=ST.mean(late.map(w=>w.full.rec));
+const recGain=now.byRec[now.full.rec].r**2-now.byRec[0].r**2;
+const g5Avg=ST.mean(late.map(w=>w.full.g5)),gapAvg=ST.mean(late.map(w=>w.full.gap));
+IMP.summary={now,preE,preL,resE,resL,vol,comp,diff,rCur,curPct,recE,recL,recGain,g5Avg,gapAvg};
+$("imp-read").innerHTML=`<p>Over the last four polls the AP behaves like a model weighted ${comp.filter(c=>c[1]>=2.5).map(c=>`${c[0]} ${Math.round(c[1])}%`).join(", ")}. In the first four polls preseason reputation carried ${Math.round(preE)}% of the weight. In the last four it carries ${Math.round(preL)}%.${ST.mean(late.map(w=>w.full.w[1]+w.full.w[2]))<15?" Offense and defense add almost nothing once wins, losses and reputation are accounted for, so the AP doesn't reward margin or style.":""}</p>
+<p>${diff.length?`Compared with this week's AP, your weights put ${joinAnd(diff.map(([n,d])=>`${Math.abs(d)} points ${d>0?"more":"less"} on ${FULLN[n]}`))}.`:"Your weights are within 10 points of the AP's on every factor."} Use the Match the AP button on the Rankings tab to load the AP's weights and recency into the sliders.</p>
+<p>${now.full.rec===0?"Weighting recent games more does not improve the fit this week, so voters are treating early and late games about equally.":`The AP fits best at recency ${now.full.rec}, so a week 1 game counts about ${Math.round(100-0.8*now.full.rec)}% as much as last week's. Recency adds ${(recGain*100).toFixed(1)} points of R² over treating every game the same${recGain<0.02?", a small effect":""}.`} Across the last four polls the best-fitting recency averages ${Math.round(recL)}, against ${Math.round(recE)} in the first four.</p>
+<p>On conferences, the AP fits best with Group of 5 opponents worth ${now.full.g5.toFixed(1)} of face value${now.full.gap?` and Big 12 and ACC opponents worth ${(1-now.full.gap).toFixed(1)} of an SEC or Big Ten opponent`:", with no gap between the Power conferences"}. Applying that discount ${now.confGain>=0.005?`adds ${(now.confGain*100).toFixed(1)} points of R² over taking every record at face value`:"barely changes the fit, so voters aren't separating schedules by conference much this week"}. Over the last four polls the implied Group of 5 value averages ${g5Avg.toFixed(2)}.</p>`}
+function chart(W){
+const w=560,h=220,P={l:36,r:26,t:10,b:28},n=W.length;
+const sx=i=>P.l+i/(n-1)*(w-P.l-P.r),sy=v=>h-P.b-v/100*(h-P.t-P.b);
+let g="";[0,25,50,75,100].forEach(v=>g+=`<line x1="${P.l}" x2="${w-P.r}" y1="${sy(v)}" y2="${sy(v)}" class="gridl"/><text x="${P.l-6}" y="${sy(v)+4}" class="axl" text-anchor="end">${v}%</text>`);
+W.forEach((x,i)=>g+=`<text x="${sx(i)}" y="${h-8}" class="axl" text-anchor="middle">${WK_LABEL(x.wk)}</text>`);
+K.forEach((k,j)=>{const pts=W.map((x,i)=>[sx(i),sy(x.full.w[j])]);g+=`<polyline points="${pts.map(p=>p.join(",")).join(" ")}" fill="none" stroke="${COL[k]}" stroke-width="2"/>`;pts.forEach((p,i)=>g+=`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="${COL[k]}"><title>${NM[k]} ${W[i].full.w[j]}%, ${WK_LABEL(W[i].wk)}</title></circle>`)});
+$("imp-chart").innerHTML=`<div class="legend">${K.map(k=>`<span><i style="background:${COL[k]}"></i>${NM[k]}</span>`).join("")}</div><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="AP implied weights by week">${g}</svg>`}
+return{run,render,reset,summary:null}})();
+
+function explainer(){
+const sel=$("ex-team");if(!sel.options.length){sel.innerHTML=T.map(r=>`<option>${r.t}</option>`).join("");sel.addEventListener("change",explainer)}
+const r=T.find(x=>x.t===sel.value),st=CUR,site={H:"vs",A:"at",N:"vs (N)"};
+const f2=v=>v.toFixed(2);
+const qRows=r.games.map(g=>{const fcs=g.c==="FCS";const ow=g.ow,ol=g.ol;
+const adjW=fcs?null:(g.w?ow:ow-1),adjL=fcs?null:(g.w?ol-1:ol);
+return`<tr><td>${site[g.s]} ${g.o}</td><td>${fcs?"FCS":ow+"-"+ol}</td><td>${fcs?"n/a":adjW+"-"+adjL}</td><td>${fcs?"n/a":f2(adjW/Math.max(adjW+adjL,1))}</td><td>${fcs?`FCS, set to ${FCS_Q.toFixed(2)}`:`${CONF_NAME[g.c]}, × ${CONF_W[g.c].toFixed(2)}`}</td><td><b>${f2(g.q)}</b></td></tr>`}).join("");
+const zr=(lbl,val,k,flip,dec)=>{const s=ZSTAT[k],z=(val-s.m)/s.s*(flip?-1:1);
+const words=Math.abs(z)<0.2?"right at the group average":`${Math.abs(z).toFixed(1)} standard deviations ${z>0?"better":"worse"} than the average team here`;
+return`<tr><td>${lbl}</td><td>${val.toFixed(dec)}</td><td>${s.m.toFixed(dec)}</td><td>${s.s.toFixed(dec)}</td><td>${flip?"−":""}(${val.toFixed(dec)} − ${s.m.toFixed(dec)}) ÷ ${s.s.toFixed(dec)}</td><td><b>${sg(z)}</b></td><td>${words}</td></tr>`};
+const p=st.S[r.t],ff=st.f;
+$("ex-body").innerHTML=`
+<h3 class="exh">Step 1. q, the opponent strength score</h3>
+<p class="exp">q is how good an opponent is, on a scale from 0 (lost every other game) to 1 (won every other game). Start with the opponent's record, remove the game against ${r.t} so a team doesn't inflate or deflate its own opponent, and take the win percentage. Then multiply by the opponent's conference value, set on the Conferences tab, because a 6-1 record in the Mountain West isn't a 6-1 record in the SEC. By default Power conferences are 1.00 and the rest of FBS is 0.70. FCS opponents get a fixed value, ${FCS_Q.toFixed(2)} right now.</p>
+<div class="scroll"><table class="gl"><thead><tr><th>Game</th><th>Opp record</th><th>Without this game</th><th>Win %</th><th>Conference adjustment</th><th>q</th></tr></thead><tbody>${qRows}</tbody></table></div>
+<p class="exp">q is then used three ways. A win is worth 1 + q, so beating a q of 0.9 team is worth almost twice as much as beating a q of 0.1 team. Points scored are multiplied by 0.6 + 0.8q, so 30 points against a good defense count for more than 30 against a bad one. Points allowed are multiplied by 1.4 − 0.8q, so giving up 30 to a bad offense counts against you more.</p>
+<h3 class="exh">Step 2. z, putting different stats on one scale</h3>
+<p class="exp">H2H résumé is around 1.3, offense around 35, defense around 18. They can't be added directly. A z-score converts each one to "how many standard deviations from the average top-25 team," so +1 means clearly better than the group, 0 means average and −1 means clearly worse. Defense is flipped so that a positive z always means better.</p>
+<div class="scroll"><table class="gl"><thead><tr><th>Stat</th><th>${r.t}</th><th>Group avg</th><th>Std dev</th><th>Calculation</th><th>z</th><th>Reads as</th></tr></thead><tbody>
+${zr("H2H résumé",r.h,"h",false,2)}${zr("Offense adj",r.o,"o",false,1)}${zr("Defense adj",r.d,"d",true,1)}${zr("Preseason AP pts (0 if unranked)",r.pre,"pre",false,0)}</tbody></table></div>
+<h3 class="exh">Step 3. Weights turn z into points</h3>
+<p class="exp">Each z is multiplied by its slider share and by 15, then added to a baseline of 50. At your current weights:</p>
+<div class="formula">${r.t}: 50 + 15×${f2(ff.h)}×${f2(r.zh)} + 15×${f2(ff.o)}×${f2(r.zo)} + 15×${f2(ff.d)}×${f2(-r.zd)}${ff.p?` + 15×${f2(ff.p)}×${f2(r.zp)}`:""} = 50 ${sg(p.ph)} ${sg(p.po)} ${sg(p.pd)}${ff.p?" "+sg(p.pp):""} = <b>${p.s.toFixed(1)}</b></div>`}
+
+
+const PRESETS={def:{...CONF_DEF,_fcs:0.10},
+flat:{...Object.fromEntries(CONF_INFO.map(c=>[c[0],1])),_fcs:0.25},
+tier:{SEC:1,B1G:1,B12:0.9,ACC:0.9,IND:1,AAC:0.7,MWC:0.65,PAC:0.65,SBC:0.65,MAC:0.6,CUSA:0.6,FBSI:0.6,_fcs:0.10},
+harsh:{SEC:1,B1G:1,B12:1,ACC:1,IND:1,AAC:0.55,MWC:0.5,PAC:0.5,SBC:0.5,MAC:0.45,CUSA:0.45,FBSI:0.45,_fcs:0.05}};
+const CONF_GAMES={};T.forEach(r=>r.raw.forEach(x=>CONF_GAMES[x.c]=(CONF_GAMES[x.c]||0)+1));
+function confSliders(){
+const box=$("conf-sliders");if(box.dataset.built)return;box.dataset.built=1;
+let grp="";box.innerHTML=CONF_INFO.filter(([k])=>CONF_GAMES[k]).map(([k,n,d,g])=>{const head=g!==grp?`<div class="tlh" style="margin:14px 0 6px">${g==="P"?"Power conferences":"Other FBS conferences"}</div>`:"";grp=g;
+return head+`<div class="ctl" style="margin-bottom:10px"><div class="ctl-top"><span>${n} <span class="rec">${CONF_GAMES[k]} ${CONF_GAMES[k]===1?"game":"games"} faced</span></span><b id="cv-${k}"></b></div>
+<input type="range" min="0.3" max="1.3" step="0.05" value="${CONF_W[k]}" data-c="${k}"></div>`}).join("");
+box.querySelectorAll("input").forEach(el=>el.addEventListener("input",()=>{CONF_W[el.dataset.c]=+el.value;confChanged(false)}));
+box.querySelectorAll("input").forEach(el=>el.addEventListener("change",()=>confChanged(true)));
+$("fcs").addEventListener("input",()=>{FCS_Q=+$("fcs").value;confChanged(false)});$("fcs").addEventListener("change",()=>confChanged(true));
+document.querySelectorAll("#conf-presets button").forEach(b=>b.addEventListener("click",()=>{const p=PRESETS[b.dataset.p];
+CONF_INFO.forEach(([k])=>{CONF_W[k]=p[k];const el=box.querySelector(`[data-c="${k}"]`);if(el)el.value=p[k]});FCS_Q=p._fcs;$("fcs").value=p._fcs;confChanged(true)}));
+$("fcsn").textContent=`${CONF_GAMES.FCS||0} FCS games across the tracked teams.`}
+function confLabels(){
+CONF_INFO.forEach(([k])=>{const v=CONF_W[k],el=$("cv-"+k);if(!el)return;el.textContent=v.toFixed(2);el.style.color=v!==CONF_DEF[k]?"var(--acc)":""});
+$("fcsv").textContent=FCS_Q.toFixed(2);$("fcsv").style.color=FCS_Q!==FCS_DEF?"var(--acc)":"";
+const match=Object.entries(PRESETS).find(([n,p])=>CONF_INFO.every(([k])=>Math.abs(p[k]-CONF_W[k])<1e-9)&&Math.abs(p._fcs-FCS_Q)<1e-9);
+document.querySelectorAll("#conf-presets button").forEach(b=>b.classList.toggle("on",!!match&&b.dataset.p===match[0]))}
+function confChanged(commit){
+recalcT();
+if(typeof IMP!=="undefined")IMP.reset();SENS_H2H=null;
+update(commit);confRender();if(commit&&typeof writeHash!=="undefined")writeHash()}
+function confRender(){
+confSliders();confLabels();
+const w=read();
+const cur=compute(...w),curSos=Object.fromEntries(T.map(r=>[r.t,r.sos]));
+const saveW={...CONF_W},saveF=FCS_Q;Object.assign(CONF_W,CONF_DEF);FCS_Q=FCS_DEF;recalcT();
+const def=compute(...w),defSos=Object.fromEntries(T.map(r=>[r.t,r.sos]));
+Object.assign(CONF_W,saveW);FCS_Q=saveF;recalcT();
+const rows=cur.L.map((t,i)=>{const was=def.L.indexOf(t)+1;return{t,now:i+1,was,ds:cur.S[t].s-def.S[t].s}});
+const moved=rows.filter(r=>r.now!==r.was).sort((a,b)=>Math.abs(b.now-b.was)-Math.abs(a.now-a.was));
+$("conf-move").innerHTML=moved.length?moved.slice(0,10).map(r=>{const d=r.was-r.now,c=d>0?"up":"dn";
+return`<div class="mv-row"><div><div>${r.t} <span class="${c}">${r.was} → ${r.now}</span></div><div class="why">Score ${sg(r.ds)} pts, schedule strength ${defSos[r.t].toFixed(2)} → ${curSos[r.t].toFixed(2)}</div></div><span class="${c}">${d>0?"▲"+d:"▼"+(-d)}</span></div>`}).join(""):`<div class="empty">No rank changes from the default values at these settings.</div>`;
+const sos=[...T].sort((a,b)=>b.sos-a.sos);
+$("conf-sos").innerHTML=`<table class="gl"><thead><tr><th>Team</th><th>Now</th><th>Default</th><th>Change</th></tr></thead><tbody>${sos.map(r=>{const d=r.sos-defSos[r.t];return`<tr><td>${r.t}</td><td>${r.sos.toFixed(2)}</td><td style="color:var(--faint)">${defSos[r.t].toFixed(2)}</td><td class="${Math.abs(d)<0.005?"flat":d>0?"up":"dn"}">${Math.abs(d)<0.005?"–":(d>0?"+":"−")+Math.abs(d).toFixed(2)}</td></tr>`}).join("")}</tbody></table>`}
+
+const CON=(()=>{
+const rk=(wk,t)=>pollRank(wk,t);
+const inPool=new Set(T.map(r=>r.t));
+function solve(A,b){const n=b.length,M=A.map((r,i)=>[...r,b[i]]);
+for(let c=0;c<n;c++){let p=c;for(let r=c+1;r<n;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;[M[c],M[p]]=[M[p],M[c]];if(Math.abs(M[c][c])<1e-12)return null;
+for(let r=0;r<n;r++)if(r!==c){const f=M[r][c]/M[c][c];for(let k=c;k<=n;k++)M[r][k]-=f*M[c][k]}}return M.map((r,i)=>r[n]/r[i])}
+function ols(X,y){const k=X[0].length,XtX=[...Array(k)].map(()=>Array(k).fill(0)),Xty=Array(k).fill(0);
+X.forEach((x,i)=>{for(let a=0;a<k;a++){Xty[a]+=x[a]*y[i];for(let b=0;b<k;b++)XtX[a][b]+=x[a]*x[b]}});return solve(XtX,Xty)}
+let cache=null;
+function between(r,a,b){return r.games.filter(g=>g.dt>a&&g.dt<b)}
+function run(){
+if(cache)return cache;
+const moves=[];
+for(let i=1;i<WEEKS.length;i++){const a=WEEKS[i-1],b=WEEKS[i];
+T.forEach(r=>{const before=rk(a,r.t);if(before>25)return;const gs=between(r,a,b);if(!gs.length)return;const after=rk(b,r.t);
+const lost=gs.filter(g=>!g.w);
+moves.push({t:r.t,wk:b,prev:a,before,after,d:after-before,lost:lost.length>0,g:lost[0]||gs[gs.length-1],won:!lost.length})})}
+const losses=moves.filter(m=>m.lost);
+const X=losses.map(m=>[1,m.g.q,Math.min(m.g.pa-m.g.pf,28),m.before]),y=losses.map(m=>m.d);
+const beta=losses.length>6?ols(X,y):null;
+losses.forEach((m,i)=>{m.exp=beta?X[i].reduce((s,x,j)=>s+x*beta[j],0):0;m.res=m.d-m.exp});
+const preR=t=>pollRank(PRE,t);
+const rhoBrand=losses.length>4?ST.spearman(losses.map(m=>preR(m.t)),losses.map(m=>m.res)):0;
+const topPre=losses.filter(m=>preR(m.t)<=10),rest=losses.filter(m=>preR(m.t)>10);
+const fellAfterWin=moves.filter(m=>m.won&&m.d>=2);
+cache={moves,losses,beta,rhoBrand,pBrand:ST.pr(rhoBrand,losses.length),topPre,rest,fellAfterWin};return cache}
+function h2hInversions(wk){
+const out=[];
+T.forEach(A=>{A.games.forEach(g=>{if(!g.w||!inPool.has(g.o)||g.dt>=wk)return;const B=T.find(x=>x.t===g.o);
+const ra=rk(wk,A.t),rb=rk(wk,B.t);if(rb>25||rb>=ra)return;
+const lostBack=B.games.some(x=>x.o===A.t&&x.w&&x.dt<wk);if(lostBack)return;
+let since=null,weeks=0;for(const w of WEEKS){if(w<=g.dt)continue;if(w>wk)break;if(rk(w,B.t)<=25&&rk(w,B.t)<rk(w,A.t)){if(!since)since=w;weeks++}else{since=null;weeks=0}}
+const recA=A.games.filter(x=>x.dt<wk),recB=B.games.filter(x=>x.dt<wk);
+out.push({w:A.t,l:B.t,ra,rb,gap:ra-rb,score:`${g.pf}-${g.pa}`,dt:g.dt,since,weeks,lA:recA.filter(x=>!x.w).length,lB:recB.filter(x=>!x.w).length})})});
+return out.sort((x,y)=>(x.lA>x.lB)-(y.lA>y.lB)||y.weeks-x.weeks||y.gap-x.gap)}
+function recordInversions(){
+const ranked=T.filter(r=>r.ap<=25);const out=[];
+ranked.forEach(X=>ranked.forEach(Y=>{if(X.ap<Y.ap&&X.L>Y.L)out.push({hi:X.t,lo:Y.t,rh:X.ap,rl:Y.ap,Lh:X.L,Ll:Y.L,backs:X.zh>=Y.zh,dz:X.zh-Y.zh,sosH:X.sos,sosL:Y.sos})}));
+return out.sort((a,b)=>a.dz-b.dz)}
+function render(){
+const c=run(),inv=h2hInversions(NOW),rec=recordInversions(),bad=rec.filter(x=>!x.backs);
+const nmP=t=>{const p=pollRank(PRE,t);return p>25?"unranked":"No. "+p};
+$("con-h2h").innerHTML=inv.length?`<table class="gl"><thead><tr><th>Winner</th><th>AP</th><th>Beat</th><th>AP</th><th>Score</th><th>Records</th><th>Inverted for</th></tr></thead><tbody>${inv.map(x=>`<tr><td>${x.w}</td><td>${x.ra>25?"NR":x.ra}</td><td>${x.l}</td><td>${x.rb}</td><td>${x.score}</td><td>${x.lA} vs ${x.lB} losses ${x.lA>x.lB?'<span class="rec">(record explains it)</span>':'<b class="dn">(unexplained)</b>'}</td><td>${x.weeks} ${x.weeks===1?"poll":"polls"}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">No head-to-head inversions in the current poll.</div>`;
+$("con-rec").innerHTML=`<p class="exp">${rec.length} ranked pairs where the team with more losses is ahead. In ${rec.length-bad.length} of them the résumé backs the AP: the team ahead has the stronger H2H résumé, usually from a harder schedule. In ${bad.length} it doesn't.</p>`+(bad.length?`<table class="gl"><thead><tr><th>Ranked ahead</th><th>Losses</th><th>Ranked behind</th><th>Losses</th><th>H2H z gap</th><th>Schedule str</th></tr></thead><tbody>${bad.slice(0,12).map(x=>`<tr><td>${x.rh}. ${x.hi}</td><td>${x.Lh}</td><td>${x.rl}. ${x.lo}</td><td>${x.Ll}</td><td class="dn">${sg(x.dz)}</td><td>${x.sosH.toFixed(2)} vs ${x.sosL.toFixed(2)}</td></tr>`).join("")}</tbody></table>`:"");
+const L=[...c.losses].sort((a,b)=>a.res-b.res);
+const row=m=>`<tr><td>${WK_LABEL(m.wk)}</td><td>${m.t}</td><td>${m.g.w?"W":"L"} ${m.g.pf}-${m.g.pa} vs ${m.g.o}</td><td>${m.before} → ${m.after>25?"NR":m.after}</td><td>${m.exp.toFixed(1)}</td><td class="${m.res<0?"up":"dn"}">${sg(m.res)}</td><td>${nmP(m.t)}</td></tr>`;
+const head=`<thead><tr><th>Poll</th><th>Team</th><th>Loss</th><th>Rank</th><th>Expected drop</th><th>Diff</th><th>Preseason</th></tr></thead>`;
+$("con-loss").innerHTML=c.beta?`<div class="metrics"><div class="metric"><div class="ml">Losses analyzed</div><div class="mv">${c.losses.length}</div><div class="ms">Ranked teams that lost between two polls</div></div>
+<div class="metric"><div class="ml">Brand protection</div><div class="mv">${c.rhoBrand.toFixed(2)}</div><div class="ms">Spearman ρ, preseason rank vs extra drop. ${fmtP(c.pBrand)}. Positive means teams that started lower get punished harder for the same loss</div></div>
+<div class="metric"><div class="ml">Extra drop per loss</div><div class="mv">${c.topPre.length?sg(ST.mean(c.topPre.map(m=>m.res))):"–"} / ${c.rest.length?sg(ST.mean(c.rest.map(m=>m.res))):"–"}</div><div class="ms">Preseason top 10 / everyone else. Spots beyond what the loss should cost</div></div></div>
+<p class="exp">Expected drop comes from a regression across every loss this season on opponent strength, margin and the team's rank going in (drop = ${c.beta[0].toFixed(1)} ${c.beta[1]<0?"−":"+"} ${Math.abs(c.beta[1]).toFixed(1)}×q ${c.beta[2]<0?"−":"+"} ${Math.abs(c.beta[2]).toFixed(2)}×margin ${c.beta[3]<0?"−":"+"} ${Math.abs(c.beta[3]).toFixed(2)}×rank). Green means the team fell less than the loss warranted. Red means it fell more.</p>
+<div class="tlh" style="margin-top:8px">Most protected</div><div class="scroll"><table class="gl">${head}<tbody>${L.slice(0,6).map(row).join("")}</tbody></table></div>
+<div class="tlh" style="margin-top:12px">Most punished</div><div class="scroll"><table class="gl">${head}<tbody>${L.slice(-6).reverse().map(row).join("")}</tbody></table></div>`:`<div class="empty">Not enough losses to fit.</div>`;
+$("con-win").innerHTML=c.fellAfterWin.length?`<table class="gl"><thead><tr><th>Poll</th><th>Team</th><th>Result</th><th>Rank</th></tr></thead><tbody>${c.fellAfterWin.map(m=>`<tr><td>${WK_LABEL(m.wk)}</td><td>${m.t}</td><td>W ${m.g.pf}-${m.g.pa} vs ${m.g.o}</td><td class="dn">${m.before} → ${m.after>25?"NR":m.after}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">No ranked team fell 2 or more spots after a win.</div>`;
+CON.summary={inv,rec,bad,c}}
+return{run,render,reset:()=>{cache=null},summary:null}})();
+
+function topline(st){
+const el=document.getElementById("topline");if(!el||!IMP.summary||!CON.summary)return;
+const S=IMP.summary,C=CON.summary,c=C.c,now=S.now,F=[];
+const nm=t=>t,pr=t=>{const p=pollRank(PRE,t);return p>25?"unranked in preseason":"preseason No. "+p};
+const rkS=r=>r>25?"unranked":"No. "+r;
+
+if(c.beta&&c.losses.length>=8){
+const pairs=[];for(let i=0;i<c.losses.length;i++)for(let j=i+1;j<c.losses.length;j++){const a=c.losses[i],b=c.losses[j];
+if(Math.abs(a.exp-b.exp)<=1.5&&Math.abs(a.before-b.before)<=6)pairs.push({a,b,gap:Math.abs(a.d-b.d)})}
+pairs.sort((x,y)=>y.gap-x.gap);const p=pairs[0];
+if(p&&p.gap>=6){const[h,s]=p.a.d>p.b.d?[p.a,p.b]:[p.b,p.a];
+F.push({w:p.gap/3,tag:"Inconsistency",col:"d",num:`${Math.max(s.d,0)} vs ${h.d}`,nl:"spots dropped for similar losses",h:`${s.t} and ${h.t}: same loss, different sentence`,t:`${s.t} lost ${s.g.pf}-${s.g.pa} to ${s.g.o} as the ${rkS(s.before)} team (${WK_LABEL(s.wk)} poll) and ${s.d<=0?"didn't drop at all":`fell ${s.d} ${s.d===1?"spot":"spots"}`}. ${h.t} lost ${h.g.pf}-${h.g.pa} to ${h.g.o} as the ${rkS(h.before)} team (${WK_LABEL(h.wk)} poll) and fell ${h.d}. By opponent strength, margin and starting rank the two losses should have cost about the same (${s.exp.toFixed(1)} vs ${h.exp.toFixed(1)} spots). ${s.t} was ${pr(s.t)}; ${h.t} was ${pr(h.t)}.`})}
+const gapB=(c.topPre.length&&c.rest.length)?ST.mean(c.rest.map(m=>m.res))-ST.mean(c.topPre.map(m=>m.res)):0;
+if(c.topPre.length>=3&&c.rest.length>=3&&Math.abs(gapB)>=1.5){const prot=[...c.topPre].sort((a,b)=>a.res-b.res)[0];
+F.push({w:Math.abs(gapB)/1.5+(c.pBrand<0.1?1:0),tag:"Bias",col:"p",num:`${Math.abs(gapB).toFixed(1)}`,nl:"spots per loss",h:gapB>0?"Losses cost less if you started in the top 10":"Preseason favorites get punished harder",t:`Across ${c.losses.length} losses by ranked teams, preseason top-10 teams fell ${Math.abs(ST.mean(c.topPre.map(m=>m.res))).toFixed(1)} spots ${ST.mean(c.topPre.map(m=>m.res))<0?"less":"more"} than the loss warranted, everyone else ${Math.abs(ST.mean(c.rest.map(m=>m.res))).toFixed(1)} ${ST.mean(c.rest.map(m=>m.res))<0?"less":"more"}. That's a ${Math.abs(gapB).toFixed(1)}-spot gap per loss (ρ ${c.rhoBrand.toFixed(2)}, ${fmtP(c.pBrand)}). Clearest case: ${prot.t} lost to ${prot.g.o} ${prot.g.pf}-${prot.g.pa} and went ${prot.before} → ${rkS(prot.after)}, where a typical loss like it costs ${prot.exp.toFixed(1)} spots.`})}}
+
+const inv=C.inv.filter(x=>x.weeks>=1),iw=x=>(1+x.gap/4+x.weeks/2)*(x.lA>x.lB?0.35:x.lA===x.lB?1:1.4)*(x.ra>25?0.6:1);
+if(inv.length){const x=[...inv].sort((a,b)=>iw(b)-iw(a))[0];
+F.push({w:iw(x),tag:"Ignored result",col:"h",num:`${x.weeks}`,nl:x.weeks===1?"poll inverted":"straight polls inverted",h:`${x.w} beat ${x.l} and still sits behind them`,t:`${x.w} beat ${x.l} ${x.score} on ${x.dt.slice(5).replace("-","/")} and has been ranked behind them in ${x.weeks} straight ${x.weeks===1?"poll":"polls"} since (${rkS(x.ra)} vs ${rkS(x.rb)} now). ${x.lA>x.lB?`${x.w} has more losses overall (${x.lA} vs ${x.lB}), which is the voters' defense.`:x.lA===x.lB?`Both have ${x.lA} ${x.lA===1?"loss":"losses"}, so record doesn't explain it.`:`${x.w} has fewer losses (${x.lA} vs ${x.lB}), so neither record nor result supports the order.`}${inv.length>1?` ${inv.length} head-to-head inversions stand in this week's poll in total.`:""}`})}
+
+const bad=C.bad;
+if(bad.length){const byHi={};bad.forEach(b=>(byHi[b.hi]=byHi[b.hi]||[]).push(b));
+const top=Object.entries(byHi).sort((a,b)=>b[1].length-a[1].length||a[1][0].dz-b[1][0].dz)[0];
+const r=T.find(x=>x.t===top[0]),below=top[1].map(b=>b.lo);
+F.push({w:1+below.length/2,tag:"Double standard",col:"d",num:`${below.length}`,nl:below.length===1?"team with fewer losses ranked below":"teams with fewer losses ranked below",h:`${r.t}: more losses, weaker résumé, still ahead`,t:`${r.t} (${r.rec}, AP ${r.ap}) is ranked above ${below.length===1?below[0]:below.slice(0,-1).join(", ")+" and "+below[below.length-1]} despite more losses and a weaker H2H résumé than ${below.length===1?"it":"each of them"}. The AP's own record emphasis (points track win % at r ${ST.pearson(T.filter(x=>x.ap<=25).map(x=>pollPts(NOW,x.t)),T.filter(x=>x.ap<=25).map(x=>x.W/(x.W+x.L))).toFixed(2)}) argues against it. ${r.t} is ${pr(r.t)}.`})}
+
+if(c.fellAfterWin.length){const m=[...c.fellAfterWin].sort((a,b)=>b.d-a.d)[0];
+F.push({w:1+m.d/3,tag:"Contrarian",col:"o",num:`${m.before} → ${m.after>25?"NR":m.after}`,nl:"after a win",h:`${m.t} won and dropped`,t:`${m.t} beat ${m.g.o} ${m.g.pf}-${m.g.pa} and fell from ${m.before} to ${rkS(m.after)} in the ${WK_LABEL(m.wk)} poll.${c.fellAfterWin.length>1?` It's one of ${c.fellAfterWin.length} cases this season of a ranked team falling 2 or more spots after a win.`:""}`})}
+
+const rows=now.rows,y=now.y,w=now.res.w;
+if(rows&&rows.length>8){const s=rows.map(r=>w[0]*r.zh+w[1]*r.zo+w[2]*r.zd),fit=ST.ols(s,y);
+const res=rows.map((r,i)=>({t:r.t,res:y[i]-(fit.a+fit.b*s[i])})).sort((a,b)=>b.res-a.res);
+const hi=res[0],lo=res[res.length-1];
+F.push({w:1.5+Math.abs(hi.res)/250,tag:"Reputation",col:"p",num:`+${Math.round(hi.res)}`,nl:"AP points beyond results",h:`Reputation is carrying ${hi.t}`,t:`Using results alone, ${hi.t} should have about ${Math.round(hi.res)} fewer AP points than it does, the largest gap in the poll. ${hi.t} was ${pr(hi.t)}. At the other end, ${lo.t} is ${Math.round(-lo.res)} points short of what its results earn, and was ${pr(lo.t)}.`})}
+
+if(now.full.g5!=null){const g5=now.full.g5;
+const PW=["SEC","B1G","B12","ACC","IND"];const g5teams=T.filter(r=>r.ap<=25).map(r=>({t:r.t,ap:r.ap,sh:r.raw.filter(x=>!PW.includes(x.c)).length/r.raw.length})).sort((a,b)=>b.sh-a.sh).slice(0,3);
+if(g5<0.9&&now.confGain>=0.005)F.push({w:1+now.confGain*40,tag:"Conference",col:"o",num:`${Math.round(g5*100)}%`,nl:"credit for a Group of 5 opponent's record",h:"How much the AP discounts a Group of 5 schedule",t:`The AP fits best when a Group of 5 opponent's record is worth ${Math.round(g5*100)}% of face value${now.full.gap?` and a Big 12 or ACC opponent ${Math.round((1-now.full.gap)*100)}% of an SEC or Big Ten one`:""}. At that rate a 6-1 Group of 5 opponent counts like a ${Math.round(6/7*g5*7)}-${7-Math.round(6/7*g5*7)} Power opponent.${g5<=0.05?" In effect the AP gives no credit for beating Group of 5 teams.":""} ${g5teams.length?`It hits the ranked teams with the most non-Power opponents hardest: ${g5teams.map(r=>`${r.t} (${Math.round(r.sh*100)}% of games, AP ${r.ap})`).join(", ")}.`:""}`});
+else F.push({w:0.8,tag:"Conference",col:"o",num:`${Math.round(g5*100)}%`,nl:"implied Group of 5 value",h:"Conference barely moves the AP",t:`Discounting Group of 5 schedules doesn't improve the fit this week (best value ${g5.toFixed(1)}). Voters are largely taking records at face value, whatever the conference.`})}
+
+F.sort((a,b)=>b.w-a.w);
+const ctx=`Context: this week's AP reproduces as ${now.full.w[0]}% H2H résumé, ${now.full.w[1]}% offense, ${now.full.w[2]}% defense and ${now.full.w[3]}% preseason reputation (fit r ${now.full.r.toFixed(2)}). Your sliders reach r ${S.rCur.toFixed(2)}.`;
+el.innerHTML=F.slice(0,6).map(f=>`<div class="fcard"><span class="ftag" style="background:var(--${f.col}-bg);color:var(--${f.col})">${f.tag}</span><h3>${f.h}</h3><div class="fnum" style="color:var(--${f.col})">${f.num}<small>${f.nl}</small></div><p>${f.t}</p></div>`).join("");
+const kp=$("kpis");if(kp){const inv=C.inv.length,ri=C.bad.length;
+kp.innerHTML=[["AP fit",now.full.r.toFixed(2),`Correlation between the implied model and this week's AP points`],
+["Reputation share",now.full.w[3]+"%",`Implied weight on preseason standing this week (results get ${100-now.full.w[3]}%)`],
+["Group of 5 credit",Math.round(now.full.g5*100)+"%",`How much a Group of 5 opponent's record counts`],
+["Contradictions",String(inv+ri),`${inv} head-to-head inversions, ${ri} unjustified record inversions`]].map(([l,v,s])=>`<div class="metric kpi"><div class="ml">${l}</div><div class="mv">${v}</div><div class="ms">${s}</div></div>`).join("")}}
+
+timeSeries();
+document.querySelectorAll(".seg button").forEach(b=>b.addEventListener("click",()=>{MAT=b.dataset.m;document.querySelectorAll(".seg button").forEach(x=>x.classList.toggle("on",x===b));renderAnalysis(CUR)}));
+$("matchap").addEventListener("click",()=>{const W=IMP.run(),f=W[W.length-1].full,w=f.w;
+CONF_INFO.forEach(([k])=>{CONF_W[k]=(k==="SEC"||k==="B1G"||k==="IND")?1:(k==="B12"||k==="ACC")?+(1-f.gap).toFixed(2):f.g5});recalcT();IMP.reset();SENS_H2H=null;
+const cs=document.getElementById("conf-sliders");if(cs&&cs.dataset.built)cs.querySelectorAll("input").forEach(el=>el.value=CONF_W[el.dataset.c]);
+setW(w[0],w[1],w[2],w[3],f.rec);if(typeof writeHash!=="undefined")writeHash();
+$("matchnote").textContent=`Loaded the AP's implied settings for ${WK_LABEL(W[W.length-1].wk)}: H2H ${w[0]}, Off ${w[1]}, Def ${w[2]}, Pre ${w[3]}, recency ${f.rec}, Group of 5 opponents × ${f.g5.toFixed(1)}, Big 12 and ACC × ${(1-f.gap).toFixed(1)}.`});
+document.querySelectorAll(".sbtn").forEach(b=>b.addEventListener("click",()=>{SUB=b.dataset.sub;document.querySelectorAll(".sbtn").forEach(x=>x.classList.toggle("on",x===b));document.querySelectorAll(".subp").forEach(p=>p.hidden=p.dataset.sub!==SUB);if(typeof writeHash!=="undefined")writeHash();window.scrollTo({top:document.querySelector(".subnav").offsetTop-4})}));
+
+const SH={};
+function shareState(){const p=new URLSearchParams();
+p.set("w",[$("wh").value,$("wo").value,$("wd").value,$("wp").value].join("-"));
+if(+$("rec").value)p.set("r",$("rec").value);
+if(!$("h2h").checked)p.set("tb","0");
+const cc=CONF_INFO.filter(([k])=>Math.abs(CONF_W[k]-CONF_DEF[k])>1e-9).map(([k])=>k+":"+CONF_W[k]);
+if(cc.length)p.set("c",cc.join(","));
+if(Math.abs(FCS_Q-FCS_DEF)>1e-9)p.set("fcs",FCS_Q);
+const tab=document.querySelector('.tab[aria-selected="true"]').dataset.tab;if(tab!=="rank")p.set("tab",tab);if(tab==="ana"&&SUB!=="ins")p.set("sub",SUB);
+return p.toString()}
+function shareURL(){return location.href.split("#")[0]+"#"+shareState()}
+function writeHash(){try{history.replaceState(null,"","#"+shareState())}catch(e){}}
+function applyHash(){
+const h=location.hash.slice(1);if(!h)return;const p=new URLSearchParams(h);
+const num=(v,lo,hi,d)=>{const n=parseFloat(v);return isFinite(n)?Math.min(hi,Math.max(lo,n)):d};
+if(p.get("w")){const w=p.get("w").split("-");["wh","wo","wd","wp"].forEach((id,i)=>$(id).value=num(w[i],0,100,$(id).value))}
+if(p.get("r"))$("rec").value=num(p.get("r"),0,100,0);
+if(p.get("tb")==="0")$("h2h").checked=false;
+if(p.get("c"))p.get("c").split(",").forEach(s=>{const[k,v]=s.split(":");if(k in CONF_W)CONF_W[k]=num(v,0.3,1.3,CONF_W[k])});
+if(p.get("fcs"))FCS_Q=num(p.get("fcs"),0,0.5,FCS_DEF);
+recalcT();
+if(p.get("sub"))SH.sub=p.get("sub");const tab=p.get("tab");if(tab){const b=document.querySelector(`.tab[data-tab="${tab}"]`);if(b)SH.tab=b}}
+$("share").addEventListener("click",async()=>{const u=shareURL();writeHash();
+try{await navigator.clipboard.writeText(u);$("sharenote").textContent="Link copied. Anyone who opens it sees these exact settings.";$("sharebox").style.display="none"}
+catch(e){$("sharebox").style.display="block";$("sharebox").value=u;$("sharebox").select();$("sharenote").textContent="Copy the link above."}});
+
+const wc=document.querySelector(".wcard");
+function wSum(){const[a,b,c,d,,rec]=read();$("wsum").textContent=`H2H ${a} · Off ${b} · Def ${c} · Pre ${d}${rec?` · Recency ${rec}`:""}${$("h2h").checked?"":" · tiebreak off"}`}
+function setCollapsed(on){wc.classList.toggle("collapsed",on);$("wtoggle").textContent=on?"Adjust":"Hide";$("wtoggle").setAttribute("aria-expanded",String(!on));wSum()}
+$("wtoggle").addEventListener("click",()=>setCollapsed(!wc.classList.contains("collapsed")));
+["wh","wo","wd","wp","rec","h2h"].forEach(id=>$(id).addEventListener("change",wSum));
+if(window.matchMedia("(max-width:760px)").matches)setCollapsed(true);else wSum();
+
+applyHash();update(true);if(SH.tab)SH.tab.click();if(SH.sub){const sb=document.querySelector(`.sbtn[data-sub="${SH.sub}"]`);if(sb)sb.click()}
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",writeHash));
+["wh","wo","wd","wp","rec","h2h"].forEach(id=>$(id).addEventListener("change",writeHash));
+</script>
+</body>
+</html>
